@@ -17,10 +17,26 @@ export default function CounselorDashboard({
   toggleTheme,
   counselingSlots,
   approveCounselingSlot,
-  announcements
+  announcements,
+  forwardedMessages = [],
+  readCounselorMessages = [],
+  markCounselorMessageAsRead
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   
+  const visibleMessages = (messages || []).filter(msg => forwardedMessages.includes(msg.id));
+  const unreadMessagesCount = visibleMessages.filter(msg => !readCounselorMessages.includes(msg.id)).length;
+  
+  const pendingSlotsCount = (counselingSlots || []).filter(s => s.status === 'Pending').length;
+  const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
+
+  const getGreeting = () => {
+    const hr = new Date().getHours();
+    if (hr < 12) return 'Good Morning';
+    if (hr < 16) return 'Good Afternoon';
+    return 'Good Evening';
+  };
+
   // Cases dropdown filter
   const [caseFilterDropdown, setCaseFilterDropdown] = useState('All'); // 'All' | 'Pending' | 'Resolved'
 
@@ -117,16 +133,28 @@ export default function CounselorDashboard({
           <li 
             onClick={() => setActiveTab('messages')} 
             className={`sidebar-nav-item ${activeTab === 'messages' ? 'active' : ''}`}
+            style={{ display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <MessageSquare size={18} />
             <span>Messages</span>
+            {unreadMessagesCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                {unreadMessagesCount}
+              </span>
+            )}
           </li>
           <li 
             onClick={() => setActiveTab('counselingSlots')} 
             className={`sidebar-nav-item ${activeTab === 'counselingSlots' ? 'active' : ''}`}
+            style={{ display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <Calendar size={18} />
             <span>Counseling Slots</span>
+            {pendingSlotsCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                {pendingSlotsCount}
+              </span>
+            )}
           </li>
           <li 
             onClick={() => {
@@ -138,9 +166,15 @@ export default function CounselorDashboard({
               }, 100);
             }} 
             className="sidebar-nav-item"
+            style={{ display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <Bell size={18} />
             <span>Announcements</span>
+            {unreadAnnouncementsCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                {unreadAnnouncementsCount}
+              </span>
+            )}
           </li>
           <li 
             onClick={() => setActiveTab('settings')} 
@@ -162,7 +196,7 @@ export default function CounselorDashboard({
         {/* Top Navigation Bar */}
         <header className="dashboard-header">
           <div>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>Good Morning, {user.name}!</h1>
+            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{getGreeting()}, {user.name}!</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Student Counselor • Cyber Safety Officer</p>
           </div>
 
@@ -181,8 +215,14 @@ export default function CounselorDashboard({
               onClick={() => setActiveTab('messages')} 
               className="icon-badge-btn" 
               title="Messages"
+              style={{ position: 'relative' }}
             >
               <MessageSquare size={20} />
+              {unreadMessagesCount > 0 && (
+                <span className="icon-badge" style={{ position: 'absolute', top: '-5px', right: '-5px', background: 'var(--primary)', color: '#fff', fontSize: '0.6rem', padding: '2px 4px', borderRadius: '50%', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  {unreadMessagesCount}
+                </span>
+              )}
             </button>
 
             <div className="user-menu-trigger">
@@ -466,7 +506,7 @@ export default function CounselorDashboard({
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {messages.map((msg, idx) => (
+              {visibleMessages.map((msg, idx) => (
                 <div key={idx} className="glass-panel" style={{ padding: '16px', background: 'var(--bg-tertiary)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>From: {msg.teacherName || 'Faculty Team'}</span>
@@ -475,12 +515,22 @@ export default function CounselorDashboard({
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                     Student: <span style={{ fontWeight: '600' }}>{msg.studentName}</span>
                   </p>
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginTop: '8px', padding: '8px', background: 'var(--bg-secondary)', borderRadius: '4px' }}>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginTop: '8px', padding: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', marginBottom: '12px' }}>
                     {msg.content}
                   </p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={() => markCounselorMessageAsRead(msg.id)}
+                      disabled={readCounselorMessages.includes(msg.id)}
+                      className="btn btn-primary"
+                      style={{ padding: '6px 14px', fontSize: '0.8rem', opacity: readCounselorMessages.includes(msg.id) ? 0.6 : 1, cursor: readCounselorMessages.includes(msg.id) ? 'not-allowed' : 'pointer' }}
+                    >
+                      {readCounselorMessages.includes(msg.id) ? 'Done' : 'Mark as Read'}
+                    </button>
+                  </div>
                 </div>
               ))}
-              {messages.length === 0 && (
+              {visibleMessages.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   No messages forwarded yet.
                 </div>
@@ -586,46 +636,59 @@ export default function CounselorDashboard({
 
         {/* Counseling Slots Tab */}
         {activeTab === 'counselingSlots' && (
-          <div className="glass-panel" style={{ padding: '32px' }}>
-            <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Counseling Slot Bookings</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
-              Review student counseling session requests, assign dates and times, and approve requests.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {counselingSlots.map(slot => {
-                const isEditing = editingSlotId === slot.id;
-                return (
-                  <div key={slot.id} className="glass-panel" style={{ padding: '20px', background: 'var(--bg-tertiary)', borderLeft: `4px solid ${slot.status === 'Approved' ? 'var(--success)' : 'var(--warning)'}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>{slot.studentName} (Roll: {slot.rollNo || 'N/A'})</span>
-                      <span className={`badge ${slot.status === 'Approved' ? 'badge-success' : 'badge-warning'}`}>{slot.status}</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'start' }}>
+            {/* Left Column: Previous Sessions History */}
+            <div className="glass-panel" style={{ padding: '24px', maxHeight: '600px', overflowY: 'auto' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Previous Sessions</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '16px' }}>
+                Completed/Approved counseling sessions.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {counselingSlots.filter(s => s.status === 'Approved').length === 0 ? (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+                    No completed sessions yet.
+                  </p>
+                ) : (
+                  counselingSlots.filter(s => s.status === 'Approved').map(slot => (
+                    <div key={slot.id} style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '3px solid var(--success)' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '0.85rem', display: 'block' }}>
+                        {slot.studentName} (Roll: {slot.rollNo || 'N/A'})
+                      </span>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
+                        Reason: {slot.reason}
+                      </p>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={12} />
+                        {slot.timings}
+                      </span>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                      <strong>Department:</strong> {slot.department}
-                    </p>
-                    <p style={{ fontStyle: 'italic', fontSize: '0.9rem', color: 'var(--text-primary)', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-glass)', marginBottom: '16px' }}>
-                      "{slot.reason}"
-                    </p>
+                  ))
+                )}
+              </div>
+            </div>
 
-                    {slot.status === 'Approved' && !isEditing ? (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.9rem', color: 'var(--success)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Clock size={16} />
-                          Scheduled: {slot.timings}
-                        </span>
-                        <button 
-                          onClick={() => {
-                            setEditingSlotId(slot.id);
-                            setSlotTimings({ ...slotTimings, [slot.id]: slot.timings });
-                          }} 
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                        >
-                          Reschedule Time
-                        </button>
+            {/* Right Column: Pending Bookings */}
+            <div className="glass-panel" style={{ padding: '32px' }}>
+              <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Counseling Slot Bookings</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
+                Review student counseling session requests, assign dates and times, and approve requests.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {counselingSlots.filter(s => s.status === 'Pending').map(slot => {
+                  return (
+                    <div key={slot.id} className="glass-panel" style={{ padding: '20px', background: 'var(--bg-tertiary)', borderLeft: '4px solid var(--warning)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>{slot.studentName} (Roll: {slot.rollNo || 'N/A'})</span>
+                        <span className="badge badge-warning">{slot.status}</span>
                       </div>
-                    ) : (
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                        <strong>Department:</strong> {slot.dept}
+                      </p>
+                      <p style={{ fontStyle: 'italic', fontSize: '0.9rem', color: 'var(--text-primary)', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-glass)', marginBottom: '16px' }}>
+                        "{slot.reason}"
+                      </p>
+
                       <div>
                         <div style={{ marginBottom: '10px' }}>
                           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>Time Slots *</label>
@@ -642,30 +705,24 @@ export default function CounselorDashboard({
                           <button 
                             onClick={() => {
                               approveCounselingSlot(slot.id, slotTimings[slot.id]);
-                              setEditingSlotId(null);
                             }}
                             disabled={!(slotTimings[slot.id] && slotTimings[slot.id].trim())}
                             className="btn btn-primary"
                             style={{ padding: '6px 14px', fontSize: '0.8rem', opacity: (slotTimings[slot.id] && slotTimings[slot.id].trim()) ? 1 : 0.5, cursor: (slotTimings[slot.id] && slotTimings[slot.id].trim()) ? 'pointer' : 'not-allowed' }}
                           >
-                            {isEditing ? 'Confirm Update' : 'Approve'}
+                            Approve
                           </button>
-                          {isEditing && (
-                            <button onClick={() => setEditingSlotId(null)} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
-                              Cancel
-                            </button>
-                          )}
                         </div>
                       </div>
-                    )}
+                    </div>
+                  );
+                })}
+                {counselingSlots.filter(s => s.status === 'Pending').length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    No pending counseling slots requested by students.
                   </div>
-                );
-              })}
-              {counselingSlots.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                  No counseling slots requested by students.
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         )}

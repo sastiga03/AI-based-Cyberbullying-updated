@@ -27,88 +27,177 @@ function App() {
   const [page, setPage] = useState('landing');
   const [currentUser, setCurrentUser] = useState(null);
 
-  // App Database States (for interactive cross-dashboard functionality)
-  const [announcements, setAnnouncements] = useState(INITIAL_ANNOUNCEMENTS);
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
-  const [hiddenTasks, setHiddenTasks] = useState(INITIAL_HIDDEN_TASKS);
-  const [submissions, setSubmissions] = useState(INITIAL_SUBMISSIONS);
-  const [cases, setCases] = useState(INITIAL_CASES);
-  const [chats, setChats] = useState(INITIAL_CHATS);
-  const [users, setUsers] = useState(INITIAL_USERS);
+  // App Database States (loaded dynamically from Spring Boot backend)
+  const [announcements, setAnnouncements] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [hiddenTasks, setHiddenTasks] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [chats, setChats] = useState({});
+  const [users, setUsers] = useState([]);
 
   // Shared materials state
-  const [materials, setMaterials] = useState([
-    { id: 1, title: "Binary Search Trees Lecture Notes", description: "This document covers binary search tree insertion, deletion, and search algorithms with complexity analysis.", teacherName: "AnandKumar", fileName: "bst_lecture_notes.pdf", date: "2026-07-28" },
-    { id: 2, title: "Relational Database Schema Design", description: "Guide on normalizing relational database tables to 3NF and BCNF. Includes solved exercises.", teacherName: "AnandKumar", fileName: "rdbms_normalization.pdf", date: "2026-07-30" },
-    { id: 3, title: "Numerical Integration Methods", description: "Complete overview of Trapezoidal and Simpson's rules with error margins.", teacherName: "Prof. Rak Karnan", fileName: "numerical_integration.pdf", date: "2026-07-29" }
-  ]);
+  const [materials, setMaterials] = useState([]);
 
   // Shared counseling slots state
   const [counselingSlots, setCounselingSlots] = useState([]);
 
-  // Handler to add a new material
-  const addMaterial = (newMat) => {
-    setMaterials(prev => [{
-      id: prev.length + 1,
-      date: new Date().toISOString().split('T')[0],
-      ...newMat
-    }, ...prev]);
-  };
-
-  // Handler to book a counseling slot
-  const bookCounseling = (slotDetails) => {
-    setCounselingSlots(prev => [...prev, {
-      id: prev.length + 1,
-      studentName: currentUser ? currentUser.name : 'Harshini Sasti',
-      status: 'Pending',
-      timings: '',
-      counselorName: 'Meena Jegan',
-      ...slotDetails
-    }]);
-  };
-
-  // Handler to approve a counseling slot (also handles rescheduling)
-  const approveCounselingSlot = (slotId, timings) => {
-    setCounselingSlots(prev => prev.map(s => 
-      s.id === slotId ? { ...s, status: 'Approved', timings: timings } : s
-    ));
-  };
-
-  // Handler to add a principal announcement
-  const addAnnouncement = (newAnn) => {
-    setAnnouncements(prev => [{
-      id: prev.length + 1,
-      title: newAnn.title || `Notice to ${newAnn.targetRole}`,
-      content: newAnn.description,
-      date: new Date().toISOString().split('T')[0],
-      read: false,
-      postedBy: 'Principal',
-      ...newAnn
-    }, ...prev]);
-  };
-
-  // Handler to update a user (Admin dashboard)
-  const updateUser = (userId, updatedUser) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updatedUser } : u));
-  };
-
   // Messages log for Teacher
-  const [studentMessages, setStudentMessages] = useState([
-    { id: 1, studentName: 'Harshini Sasti', subject: 'Question about assignment', content: 'Professor, can I use a doubly linked list instead of a binary tree for the data structures assignment?', date: '2026-06-30' },
-    { id: 2, studentName: 'Divya', subject: 'Request for extension', content: 'Sir, I am unwell. Can I get a 1-day extension for the database project submission?', date: '2026-06-29' },
-    { id: 3, studentName: 'Madhan', subject: 'Feedback Request', content: 'Ma\'am, I have submitted my project. Please let me know if there are any issues with it.', date: '2026-06-28' }
-  ]);
+  const [studentMessages, setStudentMessages] = useState([]);
 
   // Messages log for Counselor (forwarded messages)
-  const [counselorMessages, setCounselorMessages] = useState([
-    { id: 1, teacherName: 'Prof AnandKumar', studentName: 'Mouna', content: 'This Student has been continuously seen on the list of flagged contents and I would ask you to keep an eye on this student’s behaviour and give counseling as well.', date: '2026-06-05' },
-    { id: 2, teacherName: 'Prof AnandKumar', studentName: 'Thrisha', content: 'This Student has a flagged Content of 95% and she should be highly monitored.', date: '2026-08-04' }
-  ]);
+  const [counselorMessages, setCounselorMessages] = useState([]);
+
+  const [forwardedMessages, setForwardedMessages] = useState(() => {
+    const stored = localStorage.getItem('forwardedMessages');
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  const [readCounselorMessages, setReadCounselorMessages] = useState(() => {
+    const stored = localStorage.getItem('readCounselorMessages');
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  const markMessageAsForwarded = (msgId) => {
+    setForwardedMessages(prev => {
+      const next = [...prev, msgId];
+      localStorage.setItem('forwardedMessages', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const markCounselorMessageAsRead = (msgId) => {
+    setReadCounselorMessages(prev => {
+      const next = [...prev, msgId];
+      localStorage.setItem('readCounselorMessages', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Refresh all application states from the backend
+  const refreshData = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    // 1. Fetch announcements
+    try {
+      const res = await fetch('http://localhost:8081/api/announcements', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setAnnouncements(await res.json());
+    } catch (e) { console.error("Error loading announcements:", e); }
+
+    // 2. Fetch tasks
+    try {
+      const res = await fetch('http://localhost:8081/api/tasks?all=true', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const allTasks = await res.json();
+        setTasks(allTasks.filter(t => t.visible));
+        setHiddenTasks(allTasks.filter(t => !t.visible));
+      }
+    } catch (e) { console.error("Error loading tasks:", e); }
+
+    // 3. Fetch submissions
+    try {
+      const res = await fetch('http://localhost:8081/api/submissions?all=true', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setSubmissions(await res.json());
+    } catch (e) { console.error("Error loading submissions:", e); }
+
+    // 4. Fetch cases
+    try {
+      const res = await fetch('http://localhost:8081/api/cases', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setCases(await res.json());
+    } catch (e) { console.error("Error loading cases:", e); }
+
+    // 5. Fetch chats
+    try {
+      const res = await fetch('http://localhost:8081/api/chats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setChats(await res.json());
+    } catch (e) { console.error("Error loading chats:", e); }
+
+    // 6. Fetch users/contacts (accessible to all roles, fallback to /api/users)
+    try {
+      let res = await fetch('http://localhost:8081/api/users/contacts', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        res = await fetch('http://localhost:8081/api/users', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+      if (res.ok) setUsers(await res.json());
+    } catch (e) { }
+
+    // 7. Fetch materials
+    try {
+      const res = await fetch('http://localhost:8081/api/materials', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setMaterials(await res.json());
+    } catch (e) { console.error("Error loading materials:", e); }
+
+    // 8. Fetch counseling slots
+    try {
+      const res = await fetch('http://localhost:8081/api/counseling-slots?all=true', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setCounselingSlots(await res.json());
+    } catch (e) { console.error("Error loading slots:", e); }
+
+    // 9. Fetch student messages (Teacher inbox)
+    try {
+      const res = await fetch('http://localhost:8081/api/student-messages', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        setStudentMessages(msgs);
+        setCounselorMessages(msgs.map(m => ({
+          id: m.id,
+          teacherName: m.teacherName || 'Faculty Team',
+          studentName: m.studentName,
+          content: m.content,
+          date: m.date
+        })));
+      }
+    } catch (e) { }
+  };
 
   // Sync theme with HTML attribute
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Restores user session on page load/refresh
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const savedUserStr = localStorage.getItem('user');
+    if (token && savedUserStr) {
+      try {
+        const savedUser = JSON.parse(savedUserStr);
+        setCurrentUser(savedUser);
+        setPage(savedUser.role.toLowerCase());
+      } catch (e) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+  }, []);
+
+  // Load backend data when user logs in
+  useEffect(() => {
+    if (currentUser) {
+      refreshData();
+    }
+  }, [currentUser]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
@@ -116,10 +205,12 @@ function App() {
 
   const handleLogin = (userCredentials) => {
     setCurrentUser(userCredentials);
-    setPage(userCredentials.role); // e.g. redirects to 'student', 'teacher', etc.
+    setPage(userCredentials.role.toLowerCase()); // e.g. redirects to 'student', 'teacher', etc.
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setCurrentUser(null);
     setPage('landing');
   };
@@ -130,169 +221,281 @@ function App() {
 
   // Operations:
   // 1. Student marks announcement as read
-  const markAnnouncementAsRead = (announcementId) => {
-    setAnnouncements(prev => prev.map(ann => 
-      ann.id === announcementId ? { ...ann, read: true } : ann
-    ));
+  const markAnnouncementAsRead = async (announcementId) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/announcements/${announcementId}/read`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 2. Student submits a task
-  const submitTask = ({ taskTitle, fileName, comment }) => {
-    // Add submission record
-    const newSub = {
-      id: submissions.length + 1,
-      taskTitle,
-      fileName,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Received',
-      feedback: 'Awaiting Review',
-      severityScore: 2, // Default safe score
-      flagStatus: 'Safe',
-      studentName: currentUser ? currentUser.name : 'Harshini Sasti',
-      content: comment
-    };
-    setSubmissions(prev => [newSub, ...prev]);
-
-    // Mark task as submitted
-    setTasks(prev => prev.map(t => 
-      t.title === taskTitle ? { ...t, submitted: true } : t
-    ));
+  const submitTask = async ({ taskTitle, fileName, comment }) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/submissions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ taskTitle, fileName, comment })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 3. Teacher publishes a hidden task
-  const publishHiddenTask = (taskId) => {
-    // Set hidden task to visible
-    setHiddenTasks(prev => prev.map(ht => 
-      ht.id === taskId ? { ...ht, visible: true } : ht
-    ));
-
-    // Find the task and add it to student active tasks list
-    const taskToPub = hiddenTasks.find(ht => ht.id === taskId);
-    if (taskToPub) {
-      const newTask = {
-        id: tasks.length + 1,
-        title: taskToPub.title,
-        instructor: currentUser ? currentUser.name : 'Prof. Anand Kumar',
-        desc: 'Class assignment published by teacher.',
-        dueDate: taskToPub.dueDate,
-        submitted: false,
-        visible: true
-      };
-      setTasks(prev => [...prev, newTask]);
-    }
+  const publishHiddenTask = async (taskId) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/tasks/${taskId}/publish`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 4. Teacher creates a new task
-  const createNewTask = ({ title, desc, dueDate, targetClass, fileName }) => {
-    const newTask = {
-      id: tasks.length + 1,
-      title,
-      instructor: currentUser ? currentUser.name : 'Prof. Anand Kumar',
-      desc,
-      dueDate,
-      submitted: false,
-      visible: true
-    };
-    setTasks(prev => [...prev, newTask]);
+  const createNewTask = async ({ title, desc, dueDate, targetClass, fileName }) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title, desc, dueDate, targetClass, fileName })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 5. Teacher forwards a flagged submission to Counselor
-  const forwardSubmissionToCounselor = (sub) => {
-    const newCase = {
-      id: cases.length + 1,
-      studentName: sub.studentName,
-      className: 'CSE A', // default
-      severity: `${sub.severityScore}%`,
-      date: sub.date,
-      content: sub.content || 'Submission file: ' + sub.fileName,
-      status: 'Pending',
-      decision: '',
-      result: `Flagged Content Severity: ${sub.severityScore}%`
-    };
-    setCases(prev => [newCase, ...prev]);
+  const forwardSubmissionToCounselor = async (sub) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/submissions/${sub.id}/forward`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 6. Teacher forwards a student message to Counselor
-  const forwardMessageToCounselor = (msg) => {
-    const newCounselorMsg = {
-      id: counselorMessages.length + 1,
-      teacherName: currentUser ? currentUser.name : 'Prof AnandKumar',
-      studentName: msg.studentName,
-      content: msg.content,
-      date: msg.date
-    };
-    setCounselorMessages(prev => [newCounselorMsg, ...prev]);
-
-    // Also add to counselor cases list
-    const newCase = {
-      id: cases.length + 1,
-      studentName: msg.studentName,
-      className: 'CSE A',
-      severity: '80%', // Assume high severity when forwarded
-      date: msg.date,
-      content: msg.content,
-      status: 'Pending',
-      decision: '',
-      result: 'Forwarded message inquiry review'
-    };
-    setCases(prev => [newCase, ...prev]);
+  const forwardMessageToCounselor = async (msg) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/student-messages/${msg.id}/forward`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      markMessageAsForwarded(msg.id);
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 7. Counselor resolves a case
-  const resolveCase = (caseId, decisionText) => {
-    setCases(prev => prev.map(c => 
-      c.id === caseId ? { ...c, status: 'Resolved', decision: decisionText } : c
-    ));
+  const resolveCase = async (caseId, decisionText) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/cases/${caseId}/resolve`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ decision: decisionText })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 8. Add chat message
-  const addChatMessage = (contactName, messageObj) => {
-    setChats(prev => ({
-      ...prev,
-      [contactName]: [...(prev[contactName] || []), messageObj]
-    }));
+  const addChatMessage = async (contactName, messageObj) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/chats', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ recipient: contactName, text: messageObj.text })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 9. Student reports an issue
-  const reportIssue = ({ type, desc, file }) => {
-    // Adds case directly to Counselor cases for review
-    const newCase = {
-      id: cases.length + 1,
-      studentName: currentUser ? currentUser.name : 'Harshini Sasti',
-      className: 'CSE A',
-      severity: '45%', // Default low-mid severity
-      date: new Date().toISOString().split('T')[0],
-      content: `${type}: ${desc}`,
-      status: 'Pending',
-      decision: '',
-      result: 'Student reported issue'
-    };
-    setCases(prev => [newCase, ...prev]);
+  const reportIssue = async ({ type, desc, file, teacherName }) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/cases', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ type, desc, file })
+      });
+
+      await fetch('http://localhost:8081/api/student-messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          studentName: currentUser ? currentUser.name : "Harshini Sasti",
+          subject: `Report: ${type}`,
+          content: desc,
+          teacherName: teacherName
+        })
+      });
+
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 10. Admin adds a user
-  const addUser = (newUserObj) => {
-    const newUser = {
-      id: users.length + 1,
-      ...newUserObj
-    };
-    setUsers(prev => [...prev, newUser]);
+  const addUser = async (newUserObj) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/users', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newUserObj)
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 11. Admin deletes a user
-  const deleteUser = (userId) => {
-    setUsers(prev => prev.filter(u => u.id !== userId));
+  const deleteUser = async (userId) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
   };
 
   // 12. Update Profile Settings details
-  const updateProfile = (newDetails) => {
-    if (currentUser) {
-      setCurrentUser(prev => ({
-        ...prev,
-        ...newDetails
-      }));
-    }
+  const updateProfile = async (newDetails) => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch('http://localhost:8081/api/users/profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newDetails)
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setCurrentUser(prev => ({ ...prev, ...updated }));
+      }
+    } catch (e) { console.error(e); }
   };
+
+  // 13. Handler to add a new material
+  const addMaterial = async (newMat) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/materials', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newMat)
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // 14. Handler to book a counseling slot
+  const bookCounseling = async (slotDetails) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/counseling-slots', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(slotDetails)
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // 15. Handler to approve a counseling slot (also handles rescheduling)
+  const approveCounselingSlot = async (slotId, timings) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/counseling-slots/${slotId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ timings })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // 16. Handler to add a principal announcement
+  const addAnnouncement = async (newAnn) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch('http://localhost:8081/api/announcements', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: newAnn.title,
+          description: newAnn.description,
+          targetRole: newAnn.targetRole
+        })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // 17. Handler to update a user (Admin dashboard)
+  const updateUser = async (userId, updatedUser) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8081/api/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedUser)
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+
 
   return (
     <div className="App">
@@ -329,6 +532,8 @@ function App() {
           materials={materials}
           counselingSlots={counselingSlots}
           bookCounseling={bookCounseling}
+          users={users}
+          cases={cases}
         />
       )}
 
@@ -350,6 +555,7 @@ function App() {
           materials={materials}
           addMaterial={addMaterial}
           announcements={announcements}
+          forwardedMessages={forwardedMessages}
         />
       )}
 
@@ -366,6 +572,9 @@ function App() {
           counselingSlots={counselingSlots}
           approveCounselingSlot={approveCounselingSlot}
           announcements={announcements}
+          forwardedMessages={forwardedMessages}
+          readCounselorMessages={readCounselorMessages}
+          markCounselorMessageAsRead={markCounselorMessageAsRead}
         />
       )}
 

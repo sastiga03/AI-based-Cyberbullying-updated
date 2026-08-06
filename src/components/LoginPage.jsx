@@ -6,29 +6,28 @@ export default function LoginPage({ onLogin, onNavigate }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Credentials matching
-    const credentials = [
-      { email: 'studentp101@kce.ac.in', pass: 'studentp101', role: 'student', name: 'Harshini Sasti' },
-      { email: 'teacherp101@kce.ac.in', pass: 'teacherp101', role: 'teacher', name: 'AnandKumar' },
-      { email: 'counselormeerajegan@kce.ac.in', pass: 'meerajegan', role: 'counselor', name: 'Meena Jegan' },
-      { email: 'adminsuresh@kce.ac.in', pass: 'admin', role: 'admin', name: 'Suresh' },
-      { email: 'principalkrishnamurthy@kce.ac.in', pass: 'Krishnamurthy', role: 'principal', name: 'Krishnamurthy' }
-    ];
+    try {
+      const response = await fetch('http://localhost:8081/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase().trim(), password: password })
+      });
 
-    const match = credentials.find(c => c.email.toLowerCase() === email.toLowerCase().trim());
-
-    if (match) {
-      if (match.pass === password) {
-        onLogin(match);
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        onLogin(data.user);
       } else {
-        setError('Incorrect password. Please try again.');
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Incorrect username or password. Please try again.');
       }
-    } else {
-      setError('Invalid Email ID. No user found with this address.');
+    } catch (err) {
+      setError('Could not connect to the backend server. Make sure it is started on port 8081.');
     }
   };
 

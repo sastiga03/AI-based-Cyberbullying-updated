@@ -12,7 +12,7 @@ import {
 export default function AdminDashboard({ 
   user, 
   onLogout, 
-  users, 
+  users = [], 
   addUser, 
   deleteUser, 
   cases, 
@@ -27,12 +27,22 @@ export default function AdminDashboard({
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   
+  const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
+
+  const getGreeting = () => {
+    const hr = new Date().getHours();
+    if (hr < 12) return 'Good Morning';
+    if (hr < 16) return 'Good Afternoon';
+    return 'Good Evening';
+  };
+
   // User Management State
   const [addUserTab, setAddUserTab] = useState('individual'); // 'individual' | 'excel'
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('Student');
+  const [newUserDept, setNewUserDept] = useState('Computer Science & Engineering');
 
   // Excel Upload states
   const [excelDragActive, setExcelDragActive] = useState(false);
@@ -48,6 +58,7 @@ export default function AdminDashboard({
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState('Student');
+  const [editDept, setEditDept] = useState('');
 
   // Announcements ref
   const announcementsRef = useRef(null);
@@ -106,12 +117,16 @@ export default function AdminDashboard({
     addUser({
       name: newUserName,
       email: newUserEmail,
-      role: newUserRole
+      role: newUserRole,
+      password: newUserPassword,
+      dept: newUserDept
     });
 
     setNewUserName('');
     setNewUserEmail('');
+    setNewUserPassword('');
     setNewUserRole('Student');
+    setNewUserDept('Computer Science & Engineering');
     alert('User added successfully.');
   };
 
@@ -191,9 +206,15 @@ export default function AdminDashboard({
               }, 100);
             }} 
             className="sidebar-nav-item"
+            style={{ display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <Bell size={18} />
             <span>Announcements</span>
+            {unreadAnnouncementsCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                {unreadAnnouncementsCount}
+              </span>
+            )}
           </li>
           <li 
             onClick={() => setActiveTab('settings')} 
@@ -215,7 +236,7 @@ export default function AdminDashboard({
         {/* Top Navigation Bar */}
         <header className="dashboard-header">
           <div>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>Good Morning, Suresh!</h1>
+            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{getGreeting()}, {user.name}!</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>System Administrator • Campus Cybersecurity</p>
           </div>
 
@@ -415,15 +436,22 @@ export default function AdminDashboard({
                       name: newUserName,
                       email: newUserEmail,
                       password: newUserPassword,
-                      role: newUserRole
+                      role: newUserRole,
+                      dept: (newUserRole === 'Student' || newUserRole === 'Teacher') ? newUserDept : ''
                     });
                     setNewUserName('');
                     setNewUserEmail('');
                     setNewUserPassword('');
                     setNewUserRole('Student');
+                    setNewUserDept('Computer Science & Engineering');
                     alert('User added successfully.');
                   }} 
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) auto', gap: '12px', alignItems: 'flex-end' }}
+                  style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: (newUserRole === 'Student' || newUserRole === 'Teacher') ? 'repeat(5, 1fr) auto' : 'repeat(4, 1fr) auto', 
+                    gap: '12px', 
+                    alignItems: 'flex-end' 
+                  }}
                 >
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Name</label>
@@ -438,7 +466,7 @@ export default function AdminDashboard({
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8&rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Email ID</label>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Email ID</label>
                     <input 
                       type="email" 
                       className="form-input" 
@@ -475,6 +503,20 @@ export default function AdminDashboard({
                       <option value="Principal">Principal</option>
                     </select>
                   </div>
+
+                  {(newUserRole === 'Student' || newUserRole === 'Teacher') && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Department</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. Computer Science & Engineering" 
+                        value={newUserDept}
+                        onChange={(e) => setNewUserDept(e.target.value)}
+                        required
+                      />
+                    </div>
+                  )}
 
                   <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px' }}>
                     Add User
@@ -587,9 +629,9 @@ export default function AdminDashboard({
                         if (!userSearchQuery.trim()) return true;
                         const q = userSearchQuery.toLowerCase();
                         return (
-                          u.name.toLowerCase().includes(q) ||
-                          u.email.toLowerCase().includes(q) ||
-                          u.role.toLowerCase().includes(q)
+                          (u.name || '').toLowerCase().includes(q) ||
+                          (u.email || '').toLowerCase().includes(q) ||
+                          (u.role || '').toLowerCase().includes(q)
                         );
                       })
                       .map(u => (
@@ -610,6 +652,7 @@ export default function AdminDashboard({
                                   setEditEmail(u.email);
                                   setEditPassword(u.password || 'password123');
                                   setEditRole(u.role);
+                                  setEditDept(u.dept || '');
                                 }} 
                                 className="btn btn-secondary" 
                                 style={{ padding: '4px 8px', fontSize: '0.75rem' }}
@@ -639,7 +682,8 @@ export default function AdminDashboard({
                       name: editName,
                       email: editEmail,
                       password: editPassword,
-                      role: editRole
+                      role: editRole,
+                      dept: (editRole === 'Student' || editRole === 'Teacher') ? editDept : ''
                     });
                     setEditingUser(null);
                     alert('User details updated successfully!');
@@ -671,6 +715,12 @@ export default function AdminDashboard({
                         <option value="Principal">Principal</option>
                       </select>
                     </div>
+                    {(editRole === 'Student' || editRole === 'Teacher') && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Department</label>
+                        <input type="text" className="form-input" value={editDept} onChange={(e) => setEditDept(e.target.value)} required />
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '24px' }}>
                     <button type="button" onClick={() => setEditingUser(null)} className="btn btn-secondary">Cancel</button>

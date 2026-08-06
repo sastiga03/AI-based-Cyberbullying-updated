@@ -23,9 +23,32 @@ export default function TeacherDashboard({
   toggleTheme,
   materials,
   addMaterial,
-  announcements
+  announcements,
+  forwardedMessages = []
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  const isNameMatch = (name1, name2) => {
+    const n1 = (name1 || '').trim().toLowerCase();
+    const n2 = (name2 || '').trim().toLowerCase();
+    if (!n1 || !n2) return false;
+    return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+  };
+
+  const filteredMessages = (messages || []).filter(msg => 
+    !msg.teacherName || isNameMatch(msg.teacherName, user.name)
+  );
+
+  const teacherUnreadMessagesCount = filteredMessages.filter(msg => !forwardedMessages.includes(msg.id)).length;
+
+  const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
+
+  const getGreeting = () => {
+    const hr = new Date().getHours();
+    if (hr < 12) return 'Good Morning';
+    if (hr < 16) return 'Good Afternoon';
+    return 'Good Evening';
+  };
   
   // Create Task states
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -215,9 +238,15 @@ export default function TeacherDashboard({
           <li 
             onClick={() => setActiveTab('messages')} 
             className={`sidebar-nav-item ${activeTab === 'messages' ? 'active' : ''}`}
+            style={{ display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <MessageSquare size={18} />
             <span>Student Messages</span>
+            {teacherUnreadMessagesCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                {teacherUnreadMessagesCount}
+              </span>
+            )}
           </li>
           <li 
             onClick={() => {
@@ -239,9 +268,15 @@ export default function TeacherDashboard({
               }, 100);
             }} 
             className="sidebar-nav-item"
+            style={{ display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <Bell size={18} />
             <span>Announcements</span>
+            {unreadAnnouncementsCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                {unreadAnnouncementsCount}
+              </span>
+            )}
           </li>
           <li 
             onClick={() => setActiveTab('settings')} 
@@ -263,7 +298,7 @@ export default function TeacherDashboard({
         {/* Top Navigation Bar */}
         <header className="dashboard-header">
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>Good Morning, Prof. Kumar!</h1>
+            <h1 style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{getGreeting()}, {user.name}!</h1>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
               <span>Tutor</span>
               <span style={{ color: 'var(--text-muted)' }}>•</span>
@@ -795,7 +830,7 @@ Deadline: Refer to dashboard instructions.`}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {messages.map(msg => (
+              {filteredMessages.map(msg => (
                 <div key={msg.id} className="glass-panel" style={{ padding: '20px', background: 'var(--bg-tertiary)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -815,17 +850,27 @@ Deadline: Refer to dashboard instructions.`}
                   </p>
 
                   <div style={{ display: 'flex', gap: '12px' }}>
-                    <button 
-                      onClick={() => handleForwardMessage(msg)}
-                      className="btn btn-primary" 
-                      style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#fff', background: 'var(--danger)', borderColor: 'var(--danger)' }}
-                    >
-                      Forward to Counselor
-                    </button>
+                    {forwardedMessages.includes(msg.id) ? (
+                      <button 
+                        disabled
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'not-allowed', opacity: 0.6 }}
+                      >
+                        Forwarded
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => handleForwardMessage(msg)}
+                        className="btn btn-primary" 
+                        style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#fff', background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      >
+                        Forward to Counselor
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
-              {messages.length === 0 && (
+              {filteredMessages.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   No messages received.
                 </div>
