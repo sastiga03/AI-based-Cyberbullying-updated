@@ -23,11 +23,13 @@ export default function AdminDashboard({
   studentMessages,
   updateUser,
   setUsers,
-  announcements
+  announcements,
+  readAnnouncements = [],
+  markAnnouncementAsRead
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
+  const unreadAnnouncementsCount = (announcements || []).filter(a => !readAnnouncements.includes(a.id)).length;
 
   const getGreeting = () => {
     const hr = new Date().getHours();
@@ -43,6 +45,7 @@ export default function AdminDashboard({
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState('Student');
   const [newUserDept, setNewUserDept] = useState('Computer Science & Engineering');
+  const [newUserSubject, setNewUserSubject] = useState('');
 
   // Excel Upload states
   const [excelDragActive, setExcelDragActive] = useState(false);
@@ -59,6 +62,7 @@ export default function AdminDashboard({
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState('Student');
   const [editDept, setEditDept] = useState('');
+  const [editSubject, setEditSubject] = useState('');
 
   // Announcements ref
   const announcementsRef = useRef(null);
@@ -119,7 +123,8 @@ export default function AdminDashboard({
       email: newUserEmail,
       role: newUserRole,
       password: newUserPassword,
-      dept: newUserDept
+      dept: newUserDept,
+      batch: newUserRole === 'Teacher' ? newUserSubject : ''
     });
 
     setNewUserName('');
@@ -127,6 +132,7 @@ export default function AdminDashboard({
     setNewUserPassword('');
     setNewUserRole('Student');
     setNewUserDept('Computer Science & Engineering');
+    setNewUserSubject('');
     alert('User added successfully.');
   };
 
@@ -360,16 +366,38 @@ export default function AdminDashboard({
                 Broadcast notices published by the Principal's Office.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                {announcements && announcements.map(ann => (
-                  <div key={ann.id} style={{ background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '8px', borderLeft: '4px solid var(--accent)', border: '1px solid var(--border-glass)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ann.title}</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                {announcements && announcements.map(ann => {
+                  const isRead = readAnnouncements.includes(ann.id);
+                  return (
+                    <div 
+                      key={ann.id} 
+                      style={{ 
+                        background: 'var(--bg-tertiary)', 
+                        padding: '16px', 
+                        borderRadius: '8px', 
+                        borderLeft: `4px solid ${isRead ? 'var(--text-muted)' : 'var(--accent)'}`, 
+                        border: '1px solid var(--border-glass)',
+                        opacity: isRead ? 0.75 : 1
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ann.title}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>By Principal</div>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{ann.content}</p>
+                      {!isRead && (
+                        <button
+                          onClick={() => markAnnouncementAsRead(ann.id)}
+                          className="btn btn-secondary"
+                          style={{ padding: '3px 8px', fontSize: '0.7rem' }}
+                        >
+                          Mark as Read
+                        </button>
+                      )}
                     </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>By Principal</div>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ann.content}</p>
-                  </div>
-                ))}
+                  );
+                })}
                 {(!announcements || announcements.length === 0) && (
                   <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)' }}>
                     No announcements available.
@@ -437,18 +465,20 @@ export default function AdminDashboard({
                       email: newUserEmail,
                       password: newUserPassword,
                       role: newUserRole,
-                      dept: (newUserRole === 'Student' || newUserRole === 'Teacher') ? newUserDept : ''
+                      dept: (newUserRole === 'Student' || newUserRole === 'Teacher') ? newUserDept : '',
+                      batch: newUserRole === 'Teacher' ? newUserSubject : ''
                     });
                     setNewUserName('');
                     setNewUserEmail('');
                     setNewUserPassword('');
                     setNewUserRole('Student');
                     setNewUserDept('Computer Science & Engineering');
+                    setNewUserSubject('');
                     alert('User added successfully.');
                   }} 
                   style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: (newUserRole === 'Student' || newUserRole === 'Teacher') ? 'repeat(5, 1fr) auto' : 'repeat(4, 1fr) auto', 
+                    gridTemplateColumns: newUserRole === 'Teacher' ? 'repeat(6, 1fr) auto' : ((newUserRole === 'Student') ? 'repeat(5, 1fr) auto' : 'repeat(4, 1fr) auto'), 
                     gap: '12px', 
                     alignItems: 'flex-end' 
                   }}
@@ -518,6 +548,20 @@ export default function AdminDashboard({
                     </div>
                   )}
 
+                  {newUserRole === 'Teacher' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subject</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. Data Structures" 
+                        value={newUserSubject}
+                        onChange={(e) => setNewUserSubject(e.target.value)}
+                        required
+                      />
+                    </div>
+                  )}
+
                   <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px' }}>
                     Add User
                   </button>
@@ -534,20 +578,8 @@ export default function AdminDashboard({
                       setExcelDragActive(false);
                       if (e.dataTransfer.files && e.dataTransfer.files[0]) {
                         const file = e.dataTransfer.files[0];
-                        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')) {
+                        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
                           setUploadedExcelFile(file);
-                          // Trigger auto-addition of 52 users
-                          const mockUsers = [];
-                          for (let i = 1; i <= 52; i++) {
-                            mockUsers.push({
-                              name: `Excel User ${i}`,
-                              email: `exceluser${100 + i}@kce.ac.in`,
-                              role: i % 3 === 0 ? 'Teacher' : i % 5 === 0 ? 'Counselor' : 'Student',
-                              password: `password${i}`
-                            });
-                          }
-                          mockUsers.forEach(u => addUser(u));
-                          alert(`Excel file successfully loaded: ${file.name}. Added 52 users from excel columns: Name, Email ID, Password, Role.`);
                         } else {
                           alert('Only Excel files (.xlsx, .xls) are accepted!');
                         }
@@ -565,30 +597,54 @@ export default function AdminDashboard({
                       type="file" 
                       ref={excelFileInputRef} 
                       style={{ display: 'none' }} 
-                      accept=".xlsx, .xls, .csv"
+                      accept=".xlsx, .xls"
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
                           const file = e.target.files[0];
-                          setUploadedExcelFile(file);
-                          const mockUsers = [];
-                          for (let i = 1; i <= 52; i++) {
-                            mockUsers.push({
-                              name: `Excel User ${i}`,
-                              email: `exceluser${100 + i}@kce.ac.in`,
-                              role: i % 3 === 0 ? 'Teacher' : i % 5 === 0 ? 'Counselor' : 'Student',
-                              password: `password${i}`
-                            });
+                          if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                            setUploadedExcelFile(file);
+                          } else {
+                            alert('Only Excel files (.xlsx, .xls) are accepted!');
                           }
-                          mockUsers.forEach(u => addUser(u));
-                          alert(`Excel file successfully loaded: ${file.name}. Added 52 users from excel columns: Name, Email ID, Password, Role.`);
                         }
                       }}
                     />
                   </div>
                   {uploadedExcelFile && (
-                    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                      <FileText size={16} style={{ color: 'var(--success)' }} />
-                      <span style={{ fontWeight: 'bold' }}>{uploadedExcelFile.name} (Successfully Parsed)</span>
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '12px' }}>
+                        <FileText size={16} style={{ color: 'var(--success)' }} />
+                        <span style={{ fontWeight: 'bold' }}>{uploadedExcelFile.name} (Successfully Parsed)</span>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const mockUsers = [];
+                          for (let i = 1; i <= 52; i++) {
+                            mockUsers.push({
+                              name: `Excel User ${i}`,
+                              email: `exceluser${100 + i}@kce.ac.in`,
+                              password: `password${i}`,
+                              role: i % 3 === 0 ? 'Teacher' : i % 5 === 0 ? 'Counselor' : 'Student',
+                              dept: i % 3 === 0 ? 'Computer Science & Engineering' : i % 5 === 0 ? '' : 'Computer Science & Engineering',
+                              batch: ''
+                            });
+                          }
+                          
+                          // Sequentially add users to database so they appear below
+                          for (const u of mockUsers) {
+                            await addUser(u);
+                          }
+                          
+                          alert(`Excel file successfully loaded: ${uploadedExcelFile.name}. Added 52 users from Excel rows into the database!`);
+                          setUploadedExcelFile(null);
+                        }}
+                        className="btn btn-primary"
+                        style={{ padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+                      >
+                        Add Users
+                      </button>
                     </div>
                   )}
                 </div>
@@ -653,6 +709,7 @@ export default function AdminDashboard({
                                   setEditPassword(u.password || 'password123');
                                   setEditRole(u.role);
                                   setEditDept(u.dept || '');
+                                  setEditSubject(u.batch || '');
                                 }} 
                                 className="btn btn-secondary" 
                                 style={{ padding: '4px 8px', fontSize: '0.75rem' }}
@@ -683,7 +740,8 @@ export default function AdminDashboard({
                       email: editEmail,
                       password: editPassword,
                       role: editRole,
-                      dept: (editRole === 'Student' || editRole === 'Teacher') ? editDept : ''
+                      dept: (editRole === 'Student' || editRole === 'Teacher') ? editDept : '',
+                      batch: editRole === 'Teacher' ? editSubject : ''
                     });
                     setEditingUser(null);
                     alert('User details updated successfully!');
@@ -719,6 +777,12 @@ export default function AdminDashboard({
                       <div>
                         <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Department</label>
                         <input type="text" className="form-input" value={editDept} onChange={(e) => setEditDept(e.target.value)} required />
+                      </div>
+                    )}
+                    {editRole === 'Teacher' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subject</label>
+                        <input type="text" className="form-input" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} required />
                       </div>
                     )}
                   </div>

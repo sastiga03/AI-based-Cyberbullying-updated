@@ -12,6 +12,7 @@ export default function StudentDashboard({
   user, 
   onLogout, 
   announcements, 
+  readAnnouncements = [],
   markAnnouncementAsRead, 
   tasks, 
   submitTask, 
@@ -26,7 +27,8 @@ export default function StudentDashboard({
   counselingSlots,
   bookCounseling,
   users = [],
-  cases = []
+  cases = [],
+  uploadFile
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedContact, setSelectedContact] = useState(null);
@@ -146,7 +148,7 @@ export default function StudentDashboard({
   const reportFileInputRef = useRef(null);
 
   // Count unread announcements
-  const unreadCount = announcements.filter(a => !a.read).length;
+  const unreadCount = announcements.filter(a => !readAnnouncements.includes(a.id)).length;
 
   // Chart data
   const assignedCount = tasks.length;
@@ -212,17 +214,24 @@ export default function StudentDashboard({
   };
 
   // Handles submitting task
-  const handleTaskSubmit = (e) => {
+  const handleTaskSubmit = async (e) => {
     e.preventDefault();
     if (!uploadedFile) {
       alert('Please upload a file before submitting.');
       return;
+    }
+
+    // Upload the file to server
+    let fileUrl = '';
+    if (uploadFile) {
+      fileUrl = await uploadFile(uploadedFile);
     }
     
     // Submit task callback to parent state
     submitTask({
       taskTitle: selectedTaskToSubmit.title,
       fileName: uploadedFile.name,
+      fileUrl: fileUrl,
       comment: taskComment
     });
 
@@ -235,7 +244,11 @@ export default function StudentDashboard({
   };
 
   // Programmatic file downloader for submissions
-  const handleDownloadFile = (fileName) => {
+  const handleDownloadFile = (fileName, fileUrl) => {
+    if (fileUrl) {
+      window.open('http://localhost:8082' + fileUrl, '_blank');
+      return;
+    }
     const content = `Karpagam College of Engineering - SafeGuard Platform\n\nThis is a download of submission file: ${fileName}\nSubmitted by: ${user.name}\nTimestamp: ${new Date().toLocaleString()}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -317,10 +330,15 @@ export default function StudentDashboard({
     }
   };
 
-  const [readMaterials, setReadMaterials] = useState([]);
+  const [readMaterials, setReadMaterials] = useState(() => {
+    const stored = localStorage.getItem(`readMaterials_${user.email}`);
+    return stored ? JSON.parse(stored) : [];
+  });
   const handleMarkMaterialAsRead = (id) => {
     if (!readMaterials.includes(id)) {
-      setReadMaterials([...readMaterials, id]);
+      const next = [...readMaterials, id];
+      setReadMaterials(next);
+      localStorage.setItem(`readMaterials_${user.email}`, JSON.stringify(next));
     }
   };
 
@@ -632,44 +650,47 @@ export default function StudentDashboard({
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {announcements.map(ann => (
-                <div 
-                  key={ann.id} 
-                  className="glass-panel" 
-                  style={{ 
-                    padding: '20px', 
-                    borderLeft: `4px solid ${ann.read ? 'var(--text-muted)' : 'var(--primary)'}`,
-                    background: ann.read ? 'var(--bg-secondary)' : 'var(--bg-tertiary)',
-                    opacity: ann.read ? 0.75 : 1
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <div>
-                      <span className={`badge ${ann.read ? 'badge-secondary' : 'badge-info'}`} style={{ marginBottom: '6px' }}>
-                        {ann.read ? 'Read' : 'Unread'}
-                      </span>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent)', marginBottom: '4px' }}>
-                        By Principal
+               {announcements.map(ann => {
+                const isRead = readAnnouncements.includes(ann.id);
+                return (
+                  <div 
+                    key={ann.id} 
+                    className="glass-panel" 
+                    style={{ 
+                      padding: '20px', 
+                      borderLeft: `4px solid ${isRead ? 'var(--text-muted)' : 'var(--primary)'}`,
+                      background: isRead ? 'var(--bg-secondary)' : 'var(--bg-tertiary)',
+                      opacity: isRead ? 0.75 : 1
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div>
+                        <span className={`badge ${isRead ? 'badge-secondary' : 'badge-info'}`} style={{ marginBottom: '6px' }}>
+                          {isRead ? 'Read' : 'Unread'}
+                        </span>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent)', marginBottom: '4px' }}>
+                          By Principal
+                        </div>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{ann.title}</h3>
                       </div>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{ann.title}</h3>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{ann.date}</span>
                     </div>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '16px' }}>
+                      {ann.content}
+                    </p>
+                    {!isRead && (
+                      <button 
+                        onClick={() => markAnnouncementAsRead(ann.id)} 
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                      >
+                        <CheckCircle2 size={14} style={{ color: 'var(--success)' }} />
+                        <span>Mark as Read</span>
+                      </button>
+                    )}
                   </div>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '16px' }}>
-                    {ann.content}
-                  </p>
-                  {!ann.read && (
-                    <button 
-                      onClick={() => markAnnouncementAsRead(ann.id)} 
-                      className="btn btn-secondary" 
-                      style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                    >
-                      <CheckCircle2 size={14} style={{ color: 'var(--success)' }} />
-                      <span>Mark as Read</span>
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -889,7 +910,7 @@ export default function StudentDashboard({
                       <td>{sub.date}</td>
                       <td>
                         <span 
-                          onClick={() => handleDownloadFile(sub.fileName)}
+                          onClick={() => handleDownloadFile(sub.fileName, sub.fileUrl)}
                           style={{ textDecoration: 'underline', color: 'var(--primary)', cursor: 'pointer' }}
                         >
                           {sub.fileName}
@@ -1363,6 +1384,10 @@ export default function StudentDashboard({
                             </button>
                             <button 
                               onClick={() => {
+                                if (mat.fileUrl) {
+                                  window.open('http://localhost:8082' + mat.fileUrl, '_blank');
+                                  return;
+                                }
                                 alert(`Simulating file download: ${mat.fileName}`);
                                 const element = document.createElement("a");
                                 const file = new Blob([`Simulated content for academic resource: ${mat.fileName}`], {type: 'text/plain'});

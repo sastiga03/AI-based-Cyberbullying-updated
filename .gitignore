@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+node_modules/
+dist/
+
+# Maven
+**/target/
+
+# Eclipse
+**/.classpath
+**/.project
+**/.settings/
+
+# Uploaded files
+**/uploads/
+
+# Environment files
+.env
+**/.env

@@ -53,10 +53,30 @@ function App() {
     return stored ? JSON.parse(stored) : [];
   });
 
+  const [forwardedSubmissions, setForwardedSubmissions] = useState(() => {
+    const stored = localStorage.getItem('forwardedSubmissions');
+    return stored ? JSON.parse(stored) : [];
+  });
+
   const [readCounselorMessages, setReadCounselorMessages] = useState(() => {
     const stored = localStorage.getItem('readCounselorMessages');
     return stored ? JSON.parse(stored) : [];
   });
+
+  const [readAnnouncements, setReadAnnouncements] = useState(() => {
+    const email = localStorage.getItem('currentUserEmail') || '';
+    const stored = localStorage.getItem(`readAnnouncements_${email}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  useEffect(() => {
+    if (currentUser) {
+      const stored = localStorage.getItem(`readAnnouncements_${currentUser.email}`);
+      setReadAnnouncements(stored ? JSON.parse(stored) : []);
+    } else {
+      setReadAnnouncements([]);
+    }
+  }, [currentUser]);
 
   const markMessageAsForwarded = (msgId) => {
     setForwardedMessages(prev => {
@@ -74,6 +94,31 @@ function App() {
     });
   };
 
+
+
+  const uploadFile = async (fileObj) => {
+    if (!fileObj) return null;
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', fileObj);
+    try {
+      const res = await fetch('http://localhost:8082/api/files/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.fileUrl;
+      }
+    } catch (e) {
+      console.error("File upload failed", e);
+    }
+    return null;
+  };
+
   // Refresh all application states from the backend
   const refreshData = async () => {
     const token = localStorage.getItem('token');
@@ -81,7 +126,7 @@ function App() {
 
     // 1. Fetch announcements
     try {
-      const res = await fetch('http://localhost:8081/api/announcements', {
+      const res = await fetch('http://localhost:8082/api/announcements', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setAnnouncements(await res.json());
@@ -89,7 +134,7 @@ function App() {
 
     // 2. Fetch tasks
     try {
-      const res = await fetch('http://localhost:8081/api/tasks?all=true', {
+      const res = await fetch('http://localhost:8082/api/tasks?all=true', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -101,7 +146,7 @@ function App() {
 
     // 3. Fetch submissions
     try {
-      const res = await fetch('http://localhost:8081/api/submissions?all=true', {
+      const res = await fetch('http://localhost:8082/api/submissions?all=true', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setSubmissions(await res.json());
@@ -109,7 +154,7 @@ function App() {
 
     // 4. Fetch cases
     try {
-      const res = await fetch('http://localhost:8081/api/cases', {
+      const res = await fetch('http://localhost:8082/api/cases', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setCases(await res.json());
@@ -117,7 +162,7 @@ function App() {
 
     // 5. Fetch chats
     try {
-      const res = await fetch('http://localhost:8081/api/chats', {
+      const res = await fetch('http://localhost:8082/api/chats', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setChats(await res.json());
@@ -138,7 +183,7 @@ function App() {
 
     // 7. Fetch materials
     try {
-      const res = await fetch('http://localhost:8081/api/materials', {
+      const res = await fetch('http://localhost:8082/api/materials', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setMaterials(await res.json());
@@ -146,7 +191,7 @@ function App() {
 
     // 8. Fetch counseling slots
     try {
-      const res = await fetch('http://localhost:8081/api/counseling-slots?all=true', {
+      const res = await fetch('http://localhost:8082/api/counseling-slots?all=true', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setCounselingSlots(await res.json());
@@ -154,7 +199,7 @@ function App() {
 
     // 9. Fetch student messages (Teacher inbox)
     try {
-      const res = await fetch('http://localhost:8081/api/student-messages', {
+      const res = await fetch('http://localhost:8082/api/student-messages', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -223,8 +268,13 @@ function App() {
   // 1. Student marks announcement as read
   const markAnnouncementAsRead = async (announcementId) => {
     const token = localStorage.getItem('token');
+    if (currentUser && !readAnnouncements.includes(announcementId)) {
+      const next = [...readAnnouncements, announcementId];
+      setReadAnnouncements(next);
+      localStorage.setItem(`readAnnouncements_${currentUser.email}`, JSON.stringify(next));
+    }
     try {
-      await fetch(`http://localhost:8081/api/announcements/${announcementId}/read`, {
+      await fetch(`http://localhost:8082/api/announcements/${announcementId}/read`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -233,16 +283,16 @@ function App() {
   };
 
   // 2. Student submits a task
-  const submitTask = async ({ taskTitle, fileName, comment }) => {
+  const submitTask = async ({ taskTitle, fileName, fileUrl, comment }) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/submissions', {
+      await fetch('http://localhost:8082/api/submissions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ taskTitle, fileName, comment })
+        body: JSON.stringify({ taskTitle, fileName, fileUrl, comment })
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -252,7 +302,7 @@ function App() {
   const publishHiddenTask = async (taskId) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/tasks/${taskId}/publish`, {
+      await fetch(`http://localhost:8082/api/tasks/${taskId}/publish`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -261,16 +311,16 @@ function App() {
   };
 
   // 4. Teacher creates a new task
-  const createNewTask = async ({ title, desc, dueDate, targetClass, fileName }) => {
+  const createNewTask = async ({ title, desc, dueDate, targetClass, fileName, fileUrl, visible = true }) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/tasks', {
+      await fetch('http://localhost:8082/api/tasks', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ title, desc, dueDate, targetClass, fileName })
+        body: JSON.stringify({ title, desc, dueDate, targetClass, fileName, fileUrl, visible })
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -280,10 +330,30 @@ function App() {
   const forwardSubmissionToCounselor = async (sub) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/submissions/${sub.id}/forward`, {
+      await fetch(`http://localhost:8082/api/submissions/${sub.id}/forward`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
+      const next = [...forwardedSubmissions, sub.id];
+      setForwardedSubmissions(next);
+      localStorage.setItem('forwardedSubmissions', JSON.stringify(next));
+
+      // Also create a message under the Counselor's name in Student Messages
+      await fetch('http://localhost:8082/api/student-messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          studentName: sub.studentName,
+          subject: `Forwarded Submission: ${sub.taskTitle}`,
+          content: `Task: ${sub.taskTitle}\nFile: ${sub.fileName}\nAI Flagged: ${sub.flagStatus} (${sub.severityScore}%)\nStudent Comment: ${sub.content || 'None'}`,
+          teacherName: 'Meena Jegan'
+        })
+      });
+
       refreshData();
     } catch (e) { console.error(e); }
   };
@@ -292,7 +362,7 @@ function App() {
   const forwardMessageToCounselor = async (msg) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/student-messages/${msg.id}/forward`, {
+      await fetch(`http://localhost:8082/api/student-messages/${msg.id}/forward`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -301,17 +371,15 @@ function App() {
     } catch (e) { console.error(e); }
   };
 
-  // 7. Counselor resolves a case
+  // 7. Counselor resolves a case (removes it from database)
   const resolveCase = async (caseId, decisionText) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/cases/${caseId}/resolve`, {
-        method: 'PUT',
+      await fetch(`http://localhost:8082/api/cases/${caseId}`, {
+        method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ decision: decisionText })
+          'Authorization': `Bearer ${token}`
+        }
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -321,7 +389,7 @@ function App() {
   const addChatMessage = async (contactName, messageObj) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/chats', {
+      await fetch('http://localhost:8082/api/chats', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -337,7 +405,7 @@ function App() {
   const reportIssue = async ({ type, desc, file, teacherName }) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/cases', {
+      await fetch('http://localhost:8082/api/cases', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -346,7 +414,7 @@ function App() {
         body: JSON.stringify({ type, desc, file })
       });
 
-      await fetch('http://localhost:8081/api/student-messages', {
+      await fetch('http://localhost:8082/api/student-messages', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -415,7 +483,7 @@ function App() {
   const addMaterial = async (newMat) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/materials', {
+      await fetch('http://localhost:8082/api/materials', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -431,7 +499,7 @@ function App() {
   const bookCounseling = async (slotDetails) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/counseling-slots', {
+      await fetch('http://localhost:8082/api/counseling-slots', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -447,7 +515,7 @@ function App() {
   const approveCounselingSlot = async (slotId, timings) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/counseling-slots/${slotId}/approve`, {
+      await fetch(`http://localhost:8082/api/counseling-slots/${slotId}/approve`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -463,7 +531,7 @@ function App() {
   const addAnnouncement = async (newAnn) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/announcements', {
+      await fetch('http://localhost:8082/api/announcements', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -519,6 +587,7 @@ function App() {
           user={currentUser} 
           onLogout={handleLogout}
           announcements={announcements}
+          readAnnouncements={readAnnouncements}
           markAnnouncementAsRead={markAnnouncementAsRead}
           tasks={tasks}
           submitTask={submitTask}
@@ -534,6 +603,7 @@ function App() {
           bookCounseling={bookCounseling}
           users={users}
           cases={cases}
+          uploadFile={uploadFile}
         />
       )}
 
@@ -555,7 +625,11 @@ function App() {
           materials={materials}
           addMaterial={addMaterial}
           announcements={announcements}
+          readAnnouncements={readAnnouncements}
+          markAnnouncementAsRead={markAnnouncementAsRead}
           forwardedMessages={forwardedMessages}
+          forwardedSubmissions={forwardedSubmissions}
+          uploadFile={uploadFile}
         />
       )}
 
@@ -572,6 +646,8 @@ function App() {
           counselingSlots={counselingSlots}
           approveCounselingSlot={approveCounselingSlot}
           announcements={announcements}
+          readAnnouncements={readAnnouncements}
+          markAnnouncementAsRead={markAnnouncementAsRead}
           forwardedMessages={forwardedMessages}
           readCounselorMessages={readCounselorMessages}
           markCounselorMessageAsRead={markCounselorMessageAsRead}
@@ -594,6 +670,8 @@ function App() {
           updateUser={updateUser}
           setUsers={setUsers}
           announcements={announcements}
+          readAnnouncements={readAnnouncements}
+          markAnnouncementAsRead={markAnnouncementAsRead}
         />
       )}
 
@@ -607,8 +685,10 @@ function App() {
           toggleTheme={toggleTheme}
           addAnnouncement={addAnnouncement}
           counselingSlots={counselingSlots}
+           announcements={announcements}
+          readAnnouncements={readAnnouncements}
+          markAnnouncementAsRead={markAnnouncementAsRead}
           studentMessages={studentMessages}
-          announcements={announcements}
         />
       )}
     </div>

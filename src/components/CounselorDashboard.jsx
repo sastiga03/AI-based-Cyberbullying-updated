@@ -18,17 +18,28 @@ export default function CounselorDashboard({
   counselingSlots,
   approveCounselingSlot,
   announcements,
+  readAnnouncements = [],
+  markAnnouncementAsRead,
   forwardedMessages = [],
   readCounselorMessages = [],
   markCounselorMessageAsRead
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  const visibleMessages = (messages || []).filter(msg => forwardedMessages.includes(msg.id));
+  const isNameMatch = (name1, name2) => {
+    const n1 = (name1 || '').trim().toLowerCase();
+    const n2 = (name2 || '').trim().toLowerCase();
+    if (!n1 || !n2) return false;
+    return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+  };
+
+  const visibleMessages = (messages || []).filter(msg => 
+    forwardedMessages.includes(msg.id) || isNameMatch(msg.teacherName, user.name)
+  );
   const unreadMessagesCount = visibleMessages.filter(msg => !readCounselorMessages.includes(msg.id)).length;
   
   const pendingSlotsCount = (counselingSlots || []).filter(s => s.status === 'Pending').length;
-  const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
+  const unreadAnnouncementsCount = (announcements || []).filter(a => !readAnnouncements.includes(a.id)).length;
 
   const getGreeting = () => {
     const hr = new Date().getHours();
@@ -337,16 +348,38 @@ export default function CounselorDashboard({
                 Notices broadcast by the Principal's Office.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                {announcements && announcements.map(ann => (
-                  <div key={ann.id} style={{ background: 'var(--bg-tertiary)', padding: '12px 16px', borderRadius: '8px', borderLeft: '4px solid var(--accent)', border: '1px solid var(--border-glass)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ann.title}</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                {announcements && announcements.map(ann => {
+                  const isRead = readAnnouncements.includes(ann.id);
+                  return (
+                    <div 
+                      key={ann.id} 
+                      style={{ 
+                        background: 'var(--bg-tertiary)', 
+                        padding: '12px 16px', 
+                        borderRadius: '8px', 
+                        borderLeft: `4px solid ${isRead ? 'var(--text-muted)' : 'var(--accent)'}`, 
+                        border: '1px solid var(--border-glass)',
+                        opacity: isRead ? 0.75 : 1
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ann.title}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>By Principal</div>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{ann.content}</p>
+                      {!isRead && (
+                        <button
+                          onClick={() => markAnnouncementAsRead(ann.id)}
+                          className="btn btn-secondary"
+                          style={{ padding: '3px 8px', fontSize: '0.7rem' }}
+                        >
+                          Mark as Read
+                        </button>
+                      )}
                     </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>By Principal</div>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ann.content}</p>
-                  </div>
-                ))}
+                  );
+                })}
                 {(!announcements || announcements.length === 0) && (
                   <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     No announcements recorded.
@@ -475,13 +508,6 @@ export default function CounselorDashboard({
                           style={{ fontSize: '0.8rem', padding: '6px 12px' }}
                         >
                           Falsely Detected
-                        </button>
-                        <button 
-                          onClick={() => handleCaseAction(c.id, 'Report Issue')} 
-                          className="btn btn-secondary" 
-                          style={{ fontSize: '0.8rem', padding: '6px 12px', color: 'var(--danger)' }}
-                        >
-                          Report Issue
                         </button>
                       </div>
                     </div>

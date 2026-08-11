@@ -24,7 +24,11 @@ export default function TeacherDashboard({
   materials,
   addMaterial,
   announcements,
-  forwardedMessages = []
+  readAnnouncements = [],
+  markAnnouncementAsRead,
+  forwardedMessages = [],
+  forwardedSubmissions = [],
+  uploadFile
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -41,7 +45,7 @@ export default function TeacherDashboard({
 
   const teacherUnreadMessagesCount = filteredMessages.filter(msg => !forwardedMessages.includes(msg.id)).length;
 
-  const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
+  const unreadAnnouncementsCount = (announcements || []).filter(a => !readAnnouncements.includes(a.id)).length;
 
   const getGreeting = () => {
     const hr = new Date().getHours();
@@ -79,6 +83,56 @@ export default function TeacherDashboard({
   // Announcements scrolling ref
   const announcementsRef = useRef(null);
 
+  // Create Hidden Task states
+  const [showCreateHiddenTaskModal, setShowCreateHiddenTaskModal] = useState(false);
+  const [hiddenTaskTitle, setHiddenTaskTitle] = useState('');
+  const [hiddenTaskFile, setHiddenTaskFile] = useState(null);
+  const [isCreatingHiddenTask, setIsCreatingHiddenTask] = useState(false);
+
+  const handleCreateHiddenTask = async (e) => {
+    e.preventDefault();
+    if (!hiddenTaskTitle.trim()) {
+      alert("Please enter a task title.");
+      return;
+    }
+    if (!hiddenTaskFile) {
+      alert("Please upload a reference PDF file.");
+      return;
+    }
+    if (!hiddenTaskFile.name.toLowerCase().endsWith('.pdf')) {
+      alert("Only PDF reference files are allowed.");
+      return;
+    }
+
+    setIsCreatingHiddenTask(true);
+    try {
+      let fileUrl = '';
+      if (uploadFile) {
+        fileUrl = await uploadFile(hiddenTaskFile);
+      }
+      
+      await createNewTask({
+        title: hiddenTaskTitle,
+        desc: 'Hidden Reference Task',
+        dueDate: '',
+        targetClass: 'CSE A',
+        fileName: hiddenTaskFile.name,
+        fileUrl: fileUrl,
+        visible: false
+      });
+
+      alert("Hidden task successfully created!");
+      setShowCreateHiddenTaskModal(false);
+      setHiddenTaskTitle('');
+      setHiddenTaskFile(null);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create hidden task.");
+    } finally {
+      setIsCreatingHiddenTask(false);
+    }
+  };
+
   // Filter for submissions
   const [submissionFilter, setSubmissionFilter] = useState('All'); // 'All' | 'Flagged' | 'Safe'
 
@@ -93,11 +147,18 @@ export default function TeacherDashboard({
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
 
+  const emailPrefix = (user.email || '').split('@')[0].toLowerCase();
+  const myTasks = tasks.filter(t => (t.instructor || '').trim().toLowerCase() === emailPrefix);
+  const myHiddenTasks = hiddenTasks.filter(t => (t.instructor || '').trim().toLowerCase() === emailPrefix);
+
+  const myTasksTitles = myTasks.map(t => t.title.toLowerCase());
+  const mySubmissions = submissions.filter(s => myTasksTitles.includes((s.taskTitle || '').toLowerCase()));
+
   // 1. Chart Data
   // Submission Analytics
-  const totalTasksCount = tasks.length + hiddenTasks.filter(t => t.visible).length;
-  const totalSubsCount = submissions.length;
-  const flaggedCount = submissions.filter(s => s.flagStatus === 'Flagged').length;
+  const totalTasksCount = myTasks.length + myHiddenTasks.length;
+  const totalSubsCount = mySubmissions.length;
+  const flaggedCount = mySubmissions.filter(s => s.flagStatus === 'Flagged').length;
 
   const submissionAnalyticsData = [
     { name: 'Total Tasks', count: totalTasksCount },
@@ -444,8 +505,17 @@ export default function TeacherDashboard({
             {/* Hidden Task Management (Replaces Recent Student Submissions) */}
             <div className="glass-panel" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.1rem' }}>Hidden Task Management</h3>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tasks hidden from students until published</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h3 style={{ fontSize: '1.1rem' }}>Hidden Task Management</h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tasks hidden from students until published</span>
+                </div>
+                <button 
+                  onClick={() => setShowCreateHiddenTaskModal(true)} 
+                  className="btn btn-primary"
+                  style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  Create hidden task
+                </button>
               </div>
 
               <div className="custom-table-container">
@@ -459,31 +529,32 @@ export default function TeacherDashboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {hiddenTasks.map(task => (
-                      <tr key={task.id}>
-                        <td style={{ fontWeight: '600' }}>{task.title}</td>
-                        <td>
-                          <span 
-                            onClick={() => setPreviewFile(task.file)}
-                            style={{ textDecoration: 'underline', color: 'var(--primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <FileDown size={14} />
-                            {task.file}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {task.visible ? (
-                              <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }}>
-                                <Eye size={16} /> Yes
-                              </span>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }}>
-                                <EyeOff size={16} /> No (Hidden)
-                              </span>
-                            )}
-                          </div>
-                        </td>
+                    {myHiddenTasks.map(task => {
+                      const fName = task.fileName || task.file || 'reference.pdf';
+                      const fUrl = task.fileUrl;
+                      return (
+                        <tr key={task.id}>
+                          <td style={{ fontWeight: '600' }}>{task.title}</td>
+                          <td>
+                            <span 
+                              onClick={() => {
+                                 if (fUrl) {
+                                   window.open('http://localhost:8082' + fUrl, '_blank');
+                                 } else {
+                                  setPreviewFile(fName);
+                                }
+                              }}
+                              style={{ textDecoration: 'underline', color: 'var(--primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <FileDown size={14} />
+                              {fName}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                              No
+                            </span>
+                          </td>
                         <td>
                           {task.visible ? (
                             <span style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: '500' }}>Published</span>
@@ -504,9 +575,10 @@ export default function TeacherDashboard({
                             </button>
                           )}
                         </td>
-                      </tr>
-                    ))}
-                    {hiddenTasks.length === 0 && (
+                        </tr>
+                      );
+                    })}
+                    {myHiddenTasks.length === 0 && (
                       <tr>
                         <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
                           No hidden tasks.
@@ -528,18 +600,40 @@ export default function TeacherDashboard({
                 Official campus circulars and notices broadcast by the Principal's Office.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-                {announcements && announcements.map(ann => (
-                  <div key={ann.id} style={{ background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '10px', borderLeft: '4px solid var(--accent)', border: '1px solid var(--border-glass)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{ann.title}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                {announcements && announcements.map(ann => {
+                  const isRead = readAnnouncements.includes(ann.id);
+                  return (
+                    <div 
+                      key={ann.id} 
+                      style={{ 
+                        background: 'var(--bg-tertiary)', 
+                        padding: '16px', 
+                        borderRadius: '10px', 
+                        borderLeft: `4px solid ${isRead ? 'var(--text-muted)' : 'var(--accent)'}`, 
+                        border: '1px solid var(--border-glass)',
+                        opacity: isRead ? 0.75 : 1
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{ann.title}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ann.date}</span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '4px' }}>
+                        Posted by: Principal
+                      </div>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>{ann.content}</p>
+                      {!isRead && (
+                        <button
+                          onClick={() => markAnnouncementAsRead(ann.id)}
+                          className="btn btn-secondary"
+                          style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          Mark as Read
+                        </button>
+                      )}
                     </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '4px' }}>
-                      Posted by: Principal
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{ann.content}</p>
-                  </div>
-                ))}
+                  );
+                })}
                 {(!announcements || announcements.length === 0) && (
                   <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     No announcements available.
@@ -735,13 +829,31 @@ Deadline: Refer to dashboard instructions.`}
                       </tr>
                     </thead>
                     <tbody>
-                      {submissions
+                      {mySubmissions
                         .filter(s => s.taskTitle === selectedSubmissionTask)
                         .map(sub => (
                           <tr key={sub.id}>
                             <td style={{ fontWeight: '600' }}>{sub.studentName}</td>
                             <td>
-                              <span style={{ textDecoration: 'underline', color: 'var(--primary)', cursor: 'pointer' }}>
+                              <span 
+                                onClick={() => {
+                                  if (sub.fileUrl) {
+                                    window.open('http://localhost:8082' + sub.fileUrl, '_blank');
+                                  } else {
+                                    const content = `Karpagam College of Engineering - SafeGuard Platform\n\nThis is a download of submission file: ${sub.fileName}\nSubmitted by: ${sub.studentName}\nTimestamp: ${new Date().toLocaleString()}`;
+                                    const blob = new Blob([content], { type: 'application/pdf' });
+                                    const url = URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = sub.fileName.includes('.') ? sub.fileName : sub.fileName + '.pdf';
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    URL.revokeObjectURL(url);
+                                  }
+                                }}
+                                style={{ textDecoration: 'underline', color: 'var(--primary)', cursor: 'pointer' }}
+                              >
                                 {sub.fileName}
                               </span>
                             </td>
@@ -755,21 +867,31 @@ Deadline: Refer to dashboard instructions.`}
                             </td>
                             <td>
                               {sub.flagStatus === 'Flagged' ? (
-                                <button 
-                                  onClick={() => handleForwardSubmission(sub)}
-                                  className="btn btn-danger" 
-                                  style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                >
-                                  <span>Forward to Counselor</span>
-                                  <ArrowRight size={14} />
-                                </button>
+                                forwardedSubmissions.includes(sub.id) ? (
+                                  <button 
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'not-allowed' }}
+                                    disabled
+                                  >
+                                    Forwarded
+                                  </button>
+                                ) : (
+                                  <button 
+                                    onClick={() => handleForwardSubmission(sub)}
+                                    className="btn btn-danger" 
+                                    style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  >
+                                    <span>Forward to Counselor</span>
+                                    <ArrowRight size={14} />
+                                  </button>
+                                )
                               ) : (
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No action required</span>
                               )}
                             </td>
                           </tr>
                         ))}
-                      {submissions.filter(s => s.taskTitle === selectedSubmissionTask).length === 0 && (
+                      {mySubmissions.filter(s => s.taskTitle === selectedSubmissionTask).length === 0 && (
                         <tr>
                           <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
                             No submissions recorded for this task yet.
@@ -796,12 +918,13 @@ Deadline: Refer to dashboard instructions.`}
                       </tr>
                     </thead>
                     <tbody>
-                      {tasks.map(t => {
-                        const count = submissions.filter(s => s.taskTitle === t.title).length;
+                      {myTasks.map(t => {
+                        const count = mySubmissions.filter(s => s.taskTitle === t.title).length;
+                        const instructorName = (t.instructor || '').includes('@') ? t.instructor.split('@')[0] : (t.instructor || emailPrefix);
                         return (
                           <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedSubmissionTask(t.title)}>
                             <td style={{ fontWeight: '600' }}>{t.title}</td>
-                            <td>{t.instructor}</td>
+                            <td>{instructorName}</td>
                             <td>
                               <span className="badge badge-info">{count} submissions</span>
                             </td>
@@ -813,6 +936,13 @@ Deadline: Refer to dashboard instructions.`}
                           </tr>
                         );
                       })}
+                      {myTasks.length === 0 && (
+                        <tr>
+                          <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                            No active tasks posted by you.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1017,7 +1147,18 @@ Deadline: Refer to dashboard instructions.`}
                             <td style={{ fontWeight: '600' }}>{mat.title}</td>
                             <td style={{ color: 'var(--text-secondary)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.description}</td>
                             <td>
-                              <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{mat.fileName}</span>
+                              <span 
+                                onClick={() => {
+                                  if (mat.fileUrl) {
+                                    window.open('http://localhost:8082' + mat.fileUrl, '_blank');
+                                  } else {
+                                    alert('Simulating download of: ' + mat.fileName);
+                                  }
+                                }}
+                                style={{ color: 'var(--primary)', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'underline' }}
+                              >
+                                {mat.fileName}
+                              </span>
                             </td>
                             <td>{mat.date}</td>
                           </tr>
@@ -1081,7 +1222,12 @@ Deadline: Refer to dashboard instructions.`}
                         e.preventDefault();
                         setNewMaterialDragActive(false);
                         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                          setNewMaterialFile(e.dataTransfer.files[0]);
+                          const file = e.dataTransfer.files[0];
+                          if (file.name.toLowerCase().endsWith('.pdf')) {
+                            setNewMaterialFile(file);
+                          } else {
+                            alert('Only PDF files are allowed!');
+                          }
                         }
                       }}
                       onClick={() => materialFileInputRef.current.click()}
@@ -1089,15 +1235,22 @@ Deadline: Refer to dashboard instructions.`}
                       <UploadCloud size={36} style={{ color: 'var(--primary)' }} />
                       <div>
                         <p style={{ fontWeight: '500', fontSize: '0.9rem' }}>Drag & drop or click to upload</p>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PDF, PPTX, DOCX up to 30MB</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Only PDF files are allowed up to 30MB</p>
                       </div>
                       <input 
                         type="file" 
                         ref={materialFileInputRef} 
                         style={{ display: 'none' }}
+                        accept=".pdf"
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
-                            setNewMaterialFile(e.target.files[0]);
+                            const file = e.target.files[0];
+                            if (file.name.toLowerCase().endsWith('.pdf')) {
+                              setNewMaterialFile(file);
+                            } else {
+                              alert('Only PDF files are allowed!');
+                              e.target.value = null;
+                            }
                           }
                         }}
                       />
@@ -1122,6 +1275,69 @@ Deadline: Refer to dashboard instructions.`}
                 </form>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Create Hidden Task Modal */}
+        {showCreateHiddenTaskModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+            <div className="glass-panel" style={{ width: '500px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '20px', color: 'var(--accent)' }}>Create Hidden Task</h3>
+              <form onSubmit={handleCreateHiddenTask}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Task Title *</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={hiddenTaskTitle} 
+                    onChange={(e) => setHiddenTaskTitle(e.target.value)} 
+                    required 
+                    placeholder="Enter task title"
+                  />
+                </div>
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Upload Reference File (PDF only) *</label>
+                  <input 
+                    type="file" 
+                    accept="application/pdf"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        if (!file.name.toLowerCase().endsWith('.pdf')) {
+                          alert("Only PDF reference files are allowed.");
+                          e.target.value = null;
+                          setHiddenTaskFile(null);
+                          return;
+                        }
+                        setHiddenTaskFile(file);
+                      }
+                    }}
+                    required 
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setShowCreateHiddenTaskModal(false);
+                      setHiddenTaskTitle('');
+                      setHiddenTaskFile(null);
+                    }} 
+                    className="btn btn-secondary"
+                    disabled={isCreatingHiddenTask}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={isCreatingHiddenTask}
+                  >
+                    {isCreatingHiddenTask ? 'Creating...' : 'Finish'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </main>
