@@ -79,6 +79,6 @@ public class DataInitializer implements CommandLineRunner {
         studentMessageRepository.save(new StudentMessage("Madhan", "Feedback Request", "Ma'am, I have submitted my project. Please let know if there are any issues with it.", LocalDate.of(2026, 6, 28)));
 
         // 8. Initialize Counseling Slots
-        counselingSlotRepository.save(new CounselingSlot("Harshini Sasti", "23CSE101", "Computer Science & Engineering", "Experiencing stress regarding exam schedule", "Pending", "", "Meena Jegan"));
+        // Initial slots left empty for fresh student bookings
     }
 }

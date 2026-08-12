@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Activity } from "lucide-react";
 import { 
   User, LogOut, Settings, Camera, Save, 
@@ -10,15 +10,19 @@ export default function PrincipalDashboard({
   user, 
   onLogout, 
   cases, 
-  updateProfile,
-  theme,
-  toggleTheme,
-  addAnnouncement,
-  counselingSlots,
-  studentMessages,
+  updateProfile, 
+  theme, 
+  toggleTheme, 
+  addAnnouncement, 
+  counselingSlots, 
+  studentMessages, 
   announcements
 }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('principal_active_tab') || 'dashboard');
+
+  useEffect(() => {
+    localStorage.setItem('principal_active_tab', activeTab);
+  }, [activeTab]);
   
   // Announcement Form states
   const [annTargetRole, setAnnTargetRole] = useState('All');
@@ -29,7 +33,12 @@ export default function PrincipalDashboard({
   const annFileInputRef = useRef(null);
 
   // Settings States
-  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
+
+  useEffect(() => {
+    setProfilePhoto(user?.profilePhotoUrl || null);
+  }, [user?.profilePhotoUrl]);
+
   const [age, setAge] = useState(user.age || '55');
   const [phone, setPhone] = useState(user.phone || '+91 94440 98765');
   const [address, setAddress] = useState(user.address || 'KCE Principal Bungalow, Coimbatore');
@@ -58,7 +67,7 @@ export default function PrincipalDashboard({
   // Save changes settings
   const handleSaveSettings = (e) => {
     e.preventDefault();
-    updateProfile({ age, phone, address });
+    updateProfile({ age, phone, address, profilePhotoUrl: profilePhoto });
     alert('Changes Saved');
     setActiveTab('dashboard');
   };
@@ -74,7 +83,9 @@ export default function PrincipalDashboard({
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProfilePhoto(event.target.result);
+        const photoUrl = event.target.result;
+        setProfilePhoto(photoUrl);
+        updateProfile({ profilePhotoUrl: photoUrl });
       };
       reader.readAsDataURL(e.target.files[0]);
     }

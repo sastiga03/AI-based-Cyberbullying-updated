@@ -36,13 +36,18 @@ public class CounselingController {
 
     @PostMapping
     public ResponseEntity<CounselingSlot> bookSlot(@Valid @RequestBody CounselingSlotRequest request) {
-        String studentName = SecurityUtils.getCurrentUserName();
-        if (studentName == null) studentName = "Harshini Sasti";
+        String studentName = request.getStudentName();
+        if (studentName == null || studentName.trim().isEmpty()) {
+            studentName = SecurityUtils.getCurrentUserName();
+        }
+        if (studentName == null || studentName.trim().isEmpty()) {
+            studentName = "Harshini Sasti";
+        }
         
         CounselingSlot slot = new CounselingSlot();
         slot.setStudentName(studentName);
-        slot.setRollNo("23CSE101"); // default
-        slot.setDept(request.getDept() != null ? request.getDept() : "Computer Science & Engineering");
+        slot.setRollNo(request.getRollNo() != null && !request.getRollNo().trim().isEmpty() ? request.getRollNo() : "23CSE101");
+        slot.setDept(request.getDept() != null && !request.getDept().trim().isEmpty() ? request.getDept() : "Computer Science & Engineering");
         slot.setReason(request.getReason());
         slot.setStatus("Pending");
         slot.setTimings("");
@@ -52,19 +57,21 @@ public class CounselingController {
         return ResponseEntity.ok(booked);
     }
 
-    @PutMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('COUNSELOR', 'ADMIN')")
-    public ResponseEntity<CounselingSlot> approveSlot(
+    @PutMapping("/{id}")
+    public ResponseEntity<CounselingSlot> updateSlot(
             @PathVariable String id,
-            @Valid @RequestBody CounselingApproveRequest request) {
+            @RequestBody CounselingSlot updatedSlot) {
         
         CounselingSlot slot = slotRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Slot not found with id: " + id));
-        slot.setStatus("Approved");
-        slot.setTimings(request.getTimings());
-        slot.setCounselorName("Meena Jegan");
+        if (updatedSlot.getStatus() != null) slot.setStatus(updatedSlot.getStatus());
+        if (updatedSlot.getTimings() != null) slot.setTimings(updatedSlot.getTimings());
+        if (updatedSlot.getReason() != null) slot.setReason(updatedSlot.getReason());
+        if (updatedSlot.getDept() != null) slot.setDept(updatedSlot.getDept());
+        if (updatedSlot.getRollNo() != null) slot.setRollNo(updatedSlot.getRollNo());
+        if (updatedSlot.getCounselorName() != null) slot.setCounselorName(updatedSlot.getCounselorName());
 
-        CounselingSlot approved = slotRepository.save(slot);
-        return ResponseEntity.ok(approved);
+        CounselingSlot saved = slotRepository.save(slot);
+        return ResponseEntity.ok(saved);
     }
 }

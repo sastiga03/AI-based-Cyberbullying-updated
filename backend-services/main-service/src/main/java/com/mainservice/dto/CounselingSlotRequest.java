@@ -1,13 +1,12 @@
 package com.mainservice.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public class CounselingSlotRequest {
 
-    @Email(message = "Invalid email")
-    @NotBlank(message = "Email is required")
     private String email;
+    private String studentName;
+    private String rollNo;
     private String dept;
     @NotBlank(message = "Reason is required")
     private String reason;
@@ -19,6 +18,22 @@ public class CounselingSlotRequest {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getStudentName() {
+        return studentName;
+    }
+
+    public void setStudentName(String studentName) {
+        this.studentName = studentName;
+    }
+
+    public String getRollNo() {
+        return rollNo;
+    }
+
+    public void setRollNo(String rollNo) {
+        this.rollNo = rollNo;
     }
 
     public String getReason() {

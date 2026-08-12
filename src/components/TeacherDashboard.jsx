@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
-  MessageSquare, FileText, CheckCircle2, User, LogOut, 
+  MessageSquare, FileText, CheckCircle, CheckCircle2, User, LogOut, 
   UploadCloud, Send, ShieldAlert, BookOpen, Settings, AlertTriangle, 
   Paperclip, Camera, Save, Eye, EyeOff, PlusCircle, Check, ArrowRight,
   Sun, Moon, Plus, Bell, FileDown
@@ -18,19 +18,44 @@ export default function TeacherDashboard({
   forwardSubmissionToCounselor, 
   messages, 
   forwardMessageToCounselor, 
-  updateProfile,
-  theme,
-  toggleTheme,
-  materials,
-  addMaterial,
-  announcements,
-  readAnnouncements = [],
-  markAnnouncementAsRead,
-  forwardedMessages = [],
-  forwardedSubmissions = [],
-  uploadFile
+  updateProfile, 
+  theme, 
+  toggleTheme, 
+  materials, 
+  addMaterial, 
+  announcements, 
+  readAnnouncements = [], 
+  markAnnouncementAsRead, 
+  forwardedMessages = [], 
+  forwardedSubmissions = [], 
+  uploadFile,
+  users = []
 }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('teacher_active_tab') || 'dashboard');
+
+  const defaultDepts = [
+    'Computer Science & Engineering',
+    'Information Technology',
+    'Artificial Intelligence & Data Science',
+    'Electronics & Communication Engineering',
+    'Civil Engineering',
+    'Mechanical Engineering',
+    'Electrical & Electronics Engineering'
+  ];
+  const availableDepartments = Array.from(new Set([
+    ...defaultDepts,
+    ...(users || []).map(u => u.dept).filter(Boolean)
+  ]));
+
+  const [taskCreatedModal, setTaskCreatedModal] = useState(false);
+  const [forwardedMessageModal, setForwardedMessageModal] = useState(false);
+  const [materialUploadedModal, setMaterialUploadedModal] = useState(false);
+  const [hiddenTaskCreatedModal, setHiddenTaskCreatedModal] = useState(false);
+  const [hiddenTaskPublishedModal, setHiddenTaskPublishedModal] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('teacher_active_tab', activeTab);
+  }, [activeTab]);
 
   const isNameMatch = (name1, name2) => {
     const n1 = (name1 || '').trim().toLowerCase();
@@ -76,12 +101,69 @@ export default function TeacherDashboard({
   const [materialsView, setMaterialsView] = useState('list'); // 'list' or 'create'
   const [newMaterialTitle, setNewMaterialTitle] = useState('');
   const [newMaterialDesc, setNewMaterialDesc] = useState('');
+  const [newMaterialDept, setNewMaterialDept] = useState(user.dept || 'Computer Science & Engineering');
   const [newMaterialFile, setNewMaterialFile] = useState(null);
   const [newMaterialDragActive, setNewMaterialDragActive] = useState(false);
   const materialFileInputRef = useRef(null);
 
   // Announcements scrolling ref
   const announcementsRef = useRef(null);
+
+  const handleDownloadFile = async (fileName, fileUrl, studentName) => {
+    const cleanFileName = fileName || 'academic_document.pdf';
+    try {
+      if (fileUrl && fileUrl.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = cleanFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      const cached = localStorage.getItem(`material_file_${cleanFileName}`) || localStorage.getItem(`material_file_${fileName}`);
+      if (cached && cached.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = cached;
+        a.download = cleanFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      if (fileUrl) {
+        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://localhost:8082${fileUrl}`;
+        const res = await fetch(fullUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = cleanFileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Error downloading file", e);
+    }
+
+    const content = `Karpagam College of Engineering - SafeGuard Platform\n\nAcademic Document: ${cleanFileName}\nUser: ${studentName || user.name}\nTimestamp: ${new Date().toLocaleString()}`;
+    const blob = new Blob([content], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = cleanFileName.includes('.') ? cleanFileName : cleanFileName + '.pdf';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   // Create Hidden Task states
   const [showCreateHiddenTaskModal, setShowCreateHiddenTaskModal] = useState(false);
@@ -121,10 +203,10 @@ export default function TeacherDashboard({
         visible: false
       });
 
-      alert("Hidden task successfully created!");
       setShowCreateHiddenTaskModal(false);
       setHiddenTaskTitle('');
       setHiddenTaskFile(null);
+      setHiddenTaskCreatedModal(true);
     } catch (err) {
       console.error(err);
       alert("Failed to create hidden task.");
@@ -137,7 +219,12 @@ export default function TeacherDashboard({
   const [submissionFilter, setSubmissionFilter] = useState('All'); // 'All' | 'Flagged' | 'Safe'
 
   // Settings states
-  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
+
+  useEffect(() => {
+    setProfilePhoto(user?.profilePhotoUrl || null);
+  }, [user?.profilePhotoUrl]);
+
   const [age, setAge] = useState(user.age || '42');
   const [phone, setPhone] = useState(user.phone || '+91 94432 12345');
   const [address, setAddress] = useState(user.address || 'KCE Staff Quarters, Coimbatore');
@@ -216,13 +303,7 @@ export default function TeacherDashboard({
       fileName: uploadedFile ? uploadedFile.name : ''
     });
 
-    alert('Task Submitted');
-    // Reset Form
-    setNewTaskTitle('');
-    setNewTaskDesc('');
-    setNewTaskDueDate('');
-    setUploadedFile(null);
-    setActiveTab('dashboard'); // Redirect to dashboard
+    setTaskCreatedModal(true);
   };
 
   // Forward submission to counselor
@@ -234,13 +315,13 @@ export default function TeacherDashboard({
   // Forward message to counselor
   const handleForwardMessage = (msg) => {
     forwardMessageToCounselor(msg);
-    alert('Message content successfully forwarded to Counselor.');
+    setForwardedMessageModal(true);
   };
 
   // Save changes settings
   const handleSaveSettings = (e) => {
     e.preventDefault();
-    updateProfile({ age, phone, address });
+    updateProfile({ age, phone, address, profilePhotoUrl: profilePhoto });
     alert('Changes Saved');
     setActiveTab('dashboard');
   };
@@ -256,7 +337,9 @@ export default function TeacherDashboard({
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProfilePhoto(event.target.result);
+        const photoUrl = event.target.result;
+        setProfilePhoto(photoUrl);
+        updateProfile({ profilePhotoUrl: photoUrl });
       };
       reader.readAsDataURL(e.target.files[0]);
     }
@@ -366,36 +449,10 @@ export default function TeacherDashboard({
               <span style={{ fontWeight: '600' }}>III Year Computer Science</span>
               <span style={{ color: 'var(--text-muted)' }}>•</span>
               <span>Gen AI (Subject Handling Staff)</span>
-              <span style={{ color: 'var(--text-muted)' }}>•</span>
-              <span className="badge badge-info" style={{ textTransform: 'none', fontSize: '0.75rem', padding: '2px 8px' }}>Class View: {selectedClass}</span>
             </div>
           </div>
 
           <div className="top-bar-icons" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Switch Classes Dropdown Button */}
-            <div style={{ position: 'relative' }}>
-              <button 
-                onClick={() => setShowClassDropdown(!showClassDropdown)} 
-                className="btn btn-secondary" 
-                style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                Switch Classes
-              </button>
-              {showClassDropdown && (
-                <div className="glass-panel" style={{ position: 'absolute', top: '100%', right: 0, zIndex: 100, display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '6px', minWidth: '180px', boxShadow: 'var(--shadow-lg)' }}>
-                  {['III Year Computer Science', 'CSE A', 'IT B', 'AD C', 'ECE C'].map((cls, idx) => (
-                    <button 
-                      key={idx} 
-                      onClick={() => { setSelectedClass(cls); setShowClassDropdown(false); }} 
-                      className="btn" 
-                      style={{ padding: '8px 12px', fontSize: '0.8rem', width: '100%', justifyContent: 'flex-start', background: selectedClass === cls ? 'var(--primary-glow)' : 'transparent', color: selectedClass === cls ? 'var(--primary)' : 'var(--text-primary)', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                    >
-                      {cls}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
             {/* Theme Toggle Icon */}
             <button 
@@ -561,10 +618,8 @@ export default function TeacherDashboard({
                           ) : (
                             <button 
                               onClick={() => {
-                                if (window.confirm("Are you sure you want to publish this task to students? Once confirmed, this task will be removed from Hidden Task list and total tasks count will increase.")) {
-                                  publishHiddenTask(task.id);
-                                  alert("Task published successfully!");
-                                }
+                                publishHiddenTask(task.id);
+                                setHiddenTaskPublishedModal(true);
                               }}
                               className="btn btn-secondary" 
                               style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
@@ -836,22 +891,7 @@ Deadline: Refer to dashboard instructions.`}
                             <td style={{ fontWeight: '600' }}>{sub.studentName}</td>
                             <td>
                               <span 
-                                onClick={() => {
-                                  if (sub.fileUrl) {
-                                    window.open('http://localhost:8082' + sub.fileUrl, '_blank');
-                                  } else {
-                                    const content = `Karpagam College of Engineering - SafeGuard Platform\n\nThis is a download of submission file: ${sub.fileName}\nSubmitted by: ${sub.studentName}\nTimestamp: ${new Date().toLocaleString()}`;
-                                    const blob = new Blob([content], { type: 'application/pdf' });
-                                    const url = URL.createObjectURL(blob);
-                                    const link = document.createElement('a');
-                                    link.href = url;
-                                    link.download = sub.fileName.includes('.') ? sub.fileName : sub.fileName + '.pdf';
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    URL.revokeObjectURL(url);
-                                  }
-                                }}
+                                onClick={() => handleDownloadFile(sub.fileName, sub.fileUrl, sub.studentName)}
                                 style={{ textDecoration: 'underline', color: 'var(--primary)', cursor: 'pointer' }}
                               >
                                 {sub.fileName}
@@ -1148,13 +1188,7 @@ Deadline: Refer to dashboard instructions.`}
                             <td style={{ color: 'var(--text-secondary)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.description}</td>
                             <td>
                               <span 
-                                onClick={() => {
-                                  if (mat.fileUrl) {
-                                    window.open('http://localhost:8082' + mat.fileUrl, '_blank');
-                                  } else {
-                                    alert('Simulating download of: ' + mat.fileName);
-                                  }
-                                }}
+                                onClick={() => handleDownloadFile(mat.fileName, mat.fileUrl, mat.teacherName)}
                                 style={{ color: 'var(--primary)', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'underline' }}
                               >
                                 {mat.fileName}
@@ -1172,20 +1206,55 @@ Deadline: Refer to dashboard instructions.`}
                 <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Create new Material</h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>Add resources or notifications that will be published instantly to students.</p>
 
-                <form onSubmit={(e) => {
+                <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!newMaterialTitle) {
                     alert('Please enter a title');
                     return;
                   }
-                  addMaterial({
+
+                  let uploadedUrl = null;
+                  let base64Fallback = null;
+
+                  if (newMaterialFile) {
+                    try {
+                      base64Fallback = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = () => resolve(null);
+                        reader.readAsDataURL(newMaterialFile);
+                      });
+
+                      if (base64Fallback) {
+                        try {
+                          localStorage.setItem(`material_file_${newMaterialFile.name}`, base64Fallback);
+                          localStorage.setItem(`material_file_${newMaterialTitle}`, base64Fallback);
+                        } catch (storageErr) {
+                          console.warn("Storage quota limit reached for local cache", storageErr);
+                        }
+                      }
+                    } catch (err) {
+                      console.error("Error reading file as data URL", err);
+                    }
+
+                    if (uploadFile) {
+                      try {
+                        uploadedUrl = await uploadFile(newMaterialFile);
+                      } catch (err) {
+                        console.error("Failed uploading material file", err);
+                      }
+                    }
+                  }
+
+                  await addMaterial({
                     title: newMaterialTitle,
                     description: newMaterialDesc,
-                    teacherName: user.name || 'AnandKumar',
-                    fileName: newMaterialFile ? newMaterialFile.name : 'academic_reference.pdf'
+                    teacherName: user.name || 'Prof. Anand Kumar',
+                    fileName: newMaterialFile ? newMaterialFile.name : 'academic_reference.pdf',
+                    fileUrl: uploadedUrl || base64Fallback,
+                    dept: newMaterialDept
                   });
-                  alert('Material successfully created and posted to students!');
-                  setMaterialsView('list');
+                  setMaterialUploadedModal(true);
                 }}>
                   <div style={{ marginBottom: '20px' }}>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Material Title *</label>
@@ -1200,10 +1269,26 @@ Deadline: Refer to dashboard instructions.`}
                   </div>
 
                   <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                      Choose Department *
+                    </label>
+                    <select 
+                      className="form-input" 
+                      value={newMaterialDept} 
+                      onChange={(e) => setNewMaterialDept(e.target.value)}
+                      required
+                    >
+                      {availableDepartments.map((d, i) => (
+                        <option key={i} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: '20px' }}>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Description</label>
                     <textarea 
                       className="form-input" 
-                      rows="6" 
+                      rows="4" 
                       placeholder="Add brief details about the material content..." 
                       value={newMaterialDesc}
                       onChange={(e) => setNewMaterialDesc(e.target.value)}
@@ -1341,6 +1426,124 @@ Deadline: Refer to dashboard instructions.`}
           </div>
         )}
       </main>
+
+      {/* Task Created Success Modal */}
+      {taskCreatedModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Task Created Successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>The new assignment task has been assigned to students.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setTaskCreatedModal(false);
+                setNewTaskTitle('');
+                setNewTaskDesc('');
+                setNewTaskDueDate('');
+                setUploadedFile(null);
+                setActiveTab('createTask');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Forwarded to Counselor Success Modal */}
+      {forwardedMessageModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Forwarded to Counselor Successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>The message incident has been transferred to the Counselor panel.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setForwardedMessageModal(false);
+                setActiveTab('messages');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Material Uploaded Success Modal */}
+      {materialUploadedModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Material Uploaded Successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>Academic resources have been published and are available for students to download.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setMaterialUploadedModal(false);
+                setNewMaterialTitle('');
+                setNewMaterialDesc('');
+                setNewMaterialFile(null);
+                setMaterialsView('list');
+                setActiveTab('materials');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden Task Created Modal */}
+      {hiddenTaskCreatedModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Material Uploaded Successfully as hidden</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>The task has been securely saved in Hidden Task Management.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setHiddenTaskCreatedModal(false);
+                setActiveTab('dashboard');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden Task Published Modal */}
+      {hiddenTaskPublishedModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Hidden Material Published successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>The material is now published and available to students.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setHiddenTaskPublishedModal(false);
+                setActiveTab('dashboard');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

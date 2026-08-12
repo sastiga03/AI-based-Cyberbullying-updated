@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   User, LogOut, Settings, Camera, Save, ShieldCheck, 
-  Trash2, Edit, Plus, Users, Cpu, Activity, AlertTriangle,
+  Trash2, Edit, Plus, Users, Cpu, Activity, AlertTriangle, CheckCircle,
   Sun, Moon, Bell, Search, UploadCloud, FileText, Calendar, MessageSquare
 } from 'lucide-react';
 import { 
@@ -16,18 +16,22 @@ export default function AdminDashboard({
   addUser, 
   deleteUser, 
   cases, 
-  updateProfile,
-  theme,
-  toggleTheme,
-  counselingSlots,
-  studentMessages,
-  updateUser,
-  setUsers,
-  announcements,
-  readAnnouncements = [],
+  updateProfile, 
+  theme, 
+  toggleTheme, 
+  counselingSlots, 
+  studentMessages, 
+  updateUser, 
+  setUsers, 
+  announcements, 
+  readAnnouncements = [], 
   markAnnouncementAsRead
 }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('admin_active_tab') || 'dashboard');
+
+  useEffect(() => {
+    localStorage.setItem('admin_active_tab', activeTab);
+  }, [activeTab]);
   
   const unreadAnnouncementsCount = (announcements || []).filter(a => !readAnnouncements.includes(a.id)).length;
 
@@ -55,7 +59,7 @@ export default function AdminDashboard({
   // Search User state
   const [userSearchQuery, setUserSearchQuery] = useState('');
 
-  // Editing User state
+  // Editing & Deleting User states
   const [editingUser, setEditingUser] = useState(null);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -63,12 +67,19 @@ export default function AdminDashboard({
   const [editRole, setEditRole] = useState('Student');
   const [editDept, setEditDept] = useState('');
   const [editSubject, setEditSubject] = useState('');
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [editSuccessModal, setEditSuccessModal] = useState(false);
 
   // Announcements ref
   const announcementsRef = useRef(null);
   
   // Settings States
-  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
+
+  useEffect(() => {
+    setProfilePhoto(user?.profilePhotoUrl || null);
+  }, [user?.profilePhotoUrl]);
+
   const [age, setAge] = useState(user.age || '35');
   const [phone, setPhone] = useState(user.phone || '+91 99654 32109');
   const [address, setAddress] = useState(user.address || 'KCE System Center, Coimbatore');
@@ -139,7 +150,7 @@ export default function AdminDashboard({
   // Save Settings Changes
   const handleSaveSettings = (e) => {
     e.preventDefault();
-    updateProfile({ age, phone, address });
+    updateProfile({ age, phone, address, profilePhotoUrl: profilePhoto });
     alert('Changes Saved');
     setActiveTab('dashboard');
   };
@@ -155,7 +166,9 @@ export default function AdminDashboard({
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProfilePhoto(event.target.result);
+        const photoUrl = event.target.result;
+        setProfilePhoto(photoUrl);
+        updateProfile({ profilePhotoUrl: photoUrl });
       };
       reader.readAsDataURL(e.target.files[0]);
     }
@@ -435,220 +448,118 @@ export default function AdminDashboard({
                   <Plus size={20} style={{ color: 'var(--primary)' }} />
                   <span>Add Users</span>
                 </h3>
-
-                {/* Sub tabs to toggle between Individual and Bulk Upload */}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
-                    onClick={() => setAddUserTab('individual')} 
-                    className={`btn ${addUserTab === 'individual' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                  >
-                    Add Individual
-                  </button>
-                  <button 
-                    onClick={() => setAddUserTab('excel')} 
-                    className={`btn ${addUserTab === 'excel' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                  >
-                    Excel Sheet Upload
-                  </button>
-                </div>
               </div>
               
-              {addUserTab === 'individual' ? (
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!newUserName || !newUserEmail || !newUserPassword) return;
-                    addUser({
-                      name: newUserName,
-                      email: newUserEmail,
-                      password: newUserPassword,
-                      role: newUserRole,
-                      dept: (newUserRole === 'Student' || newUserRole === 'Teacher') ? newUserDept : '',
-                      batch: newUserRole === 'Teacher' ? newUserSubject : ''
-                    });
-                    setNewUserName('');
-                    setNewUserEmail('');
-                    setNewUserPassword('');
-                    setNewUserRole('Student');
-                    setNewUserDept('Computer Science & Engineering');
-                    setNewUserSubject('');
-                    alert('User added successfully.');
-                  }} 
-                  style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: newUserRole === 'Teacher' ? 'repeat(6, 1fr) auto' : ((newUserRole === 'Student') ? 'repeat(5, 1fr) auto' : 'repeat(4, 1fr) auto'), 
-                    gap: '12px', 
-                    alignItems: 'flex-end' 
-                  }}
-                >
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newUserName || !newUserEmail || !newUserPassword) return;
+                  addUser({
+                    name: newUserName,
+                    email: newUserEmail,
+                    password: newUserPassword,
+                    role: newUserRole,
+                    dept: (newUserRole === 'Student' || newUserRole === 'Teacher') ? newUserDept : '',
+                    batch: newUserRole === 'Teacher' ? newUserSubject : ''
+                  });
+                  setNewUserName('');
+                  setNewUserEmail('');
+                  setNewUserPassword('');
+                  setNewUserRole('Student');
+                  setNewUserDept('Computer Science & Engineering');
+                  setNewUserSubject('');
+                  alert('User added successfully.');
+                }} 
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: newUserRole === 'Teacher' ? 'repeat(6, 1fr) auto' : ((newUserRole === 'Student') ? 'repeat(5, 1fr) auto' : 'repeat(4, 1fr) auto'), 
+                  gap: '12px', 
+                  alignItems: 'flex-end' 
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Name</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Enter full name" 
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Email ID</label>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    placeholder="name@kce.ac.in" 
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Password</label>
+                  <input 
+                    type="password" 
+                    className="form-input" 
+                    placeholder="Enter password" 
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Role</label>
+                  <select 
+                    className="form-input"
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                  >
+                    <option value="Student">Student</option>
+                    <option value="Teacher">Teacher</option>
+                    <option value="Counselor">Counselor</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Principal">Principal</option>
+                  </select>
+                </div>
+
+                {(newUserRole === 'Student' || newUserRole === 'Teacher') && (
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Name</label>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Department</label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="Enter full name" 
-                      value={newUserName}
-                      onChange={(e) => setNewUserName(e.target.value)}
+                      placeholder="e.g. Computer Science & Engineering" 
+                      value={newUserDept}
+                      onChange={(e) => setNewUserDept(e.target.value)}
                       required
                     />
                   </div>
+                )}
 
+                {newUserRole === 'Teacher' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Email ID</label>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subject</label>
                     <input 
-                      type="email" 
+                      type="text" 
                       className="form-input" 
-                      placeholder="name@kce.ac.in" 
-                      value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      placeholder="e.g. Data Structures" 
+                      value={newUserSubject}
+                      onChange={(e) => setNewUserSubject(e.target.value)}
                       required
                     />
                   </div>
+                )}
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Password</label>
-                    <input 
-                      type="password" 
-                      className="form-input" 
-                      placeholder="Enter password" 
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Role</label>
-                    <select 
-                      className="form-input"
-                      value={newUserRole}
-                      onChange={(e) => setNewUserRole(e.target.value)}
-                    >
-                      <option value="Student">Student</option>
-                      <option value="Teacher">Teacher</option>
-                      <option value="Counselor">Counselor</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Principal">Principal</option>
-                    </select>
-                  </div>
-
-                  {(newUserRole === 'Student' || newUserRole === 'Teacher') && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Department</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="e.g. Computer Science & Engineering" 
-                        value={newUserDept}
-                        onChange={(e) => setNewUserDept(e.target.value)}
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {newUserRole === 'Teacher' && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subject</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="e.g. Data Structures" 
-                        value={newUserSubject}
-                        onChange={(e) => setNewUserSubject(e.target.value)}
-                        required
-                      />
-                    </div>
-                  )}
-
-                  <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px' }}>
-                    Add User
-                  </button>
-                </form>
-              ) : (
-                <div>
-                  <div 
-                    className={`drag-drop-zone ${excelDragActive ? 'active' : ''}`}
-                    onDragEnter={(e) => { e.preventDefault(); setExcelDragActive(true); }}
-                    onDragOver={(e) => { e.preventDefault(); setExcelDragActive(true); }}
-                    onDragLeave={(e) => { e.preventDefault(); setExcelDragActive(false); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setExcelDragActive(false);
-                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                        const file = e.dataTransfer.files[0];
-                        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-                          setUploadedExcelFile(file);
-                        } else {
-                          alert('Only Excel files (.xlsx, .xls) are accepted!');
-                        }
-                      }
-                    }}
-                    onClick={() => excelFileInputRef.current.click()}
-                    style={{ padding: '40px 20px' }}
-                  >
-                    <UploadCloud size={40} style={{ color: 'var(--primary)' }} />
-                    <div>
-                      <p style={{ fontWeight: '500' }}>Drag & drop Excel sheet or click to upload</p>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Supports .xlsx, .xls only</p>
-                    </div>
-                    <input 
-                      type="file" 
-                      ref={excelFileInputRef} 
-                      style={{ display: 'none' }} 
-                      accept=".xlsx, .xls"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const file = e.target.files[0];
-                          if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-                            setUploadedExcelFile(file);
-                          } else {
-                            alert('Only Excel files (.xlsx, .xls) are accepted!');
-                          }
-                        }
-                      }}
-                    />
-                  </div>
-                  {uploadedExcelFile && (
-                    <div style={{ marginTop: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '12px' }}>
-                        <FileText size={16} style={{ color: 'var(--success)' }} />
-                        <span style={{ fontWeight: 'bold' }}>{uploadedExcelFile.name} (Successfully Parsed)</span>
-                      </div>
-                      
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const mockUsers = [];
-                          for (let i = 1; i <= 52; i++) {
-                            mockUsers.push({
-                              name: `Excel User ${i}`,
-                              email: `exceluser${100 + i}@kce.ac.in`,
-                              password: `password${i}`,
-                              role: i % 3 === 0 ? 'Teacher' : i % 5 === 0 ? 'Counselor' : 'Student',
-                              dept: i % 3 === 0 ? 'Computer Science & Engineering' : i % 5 === 0 ? '' : 'Computer Science & Engineering',
-                              batch: ''
-                            });
-                          }
-                          
-                          // Sequentially add users to database so they appear below
-                          for (const u of mockUsers) {
-                            await addUser(u);
-                          }
-                          
-                          alert(`Excel file successfully loaded: ${uploadedExcelFile.name}. Added 52 users from Excel rows into the database!`);
-                          setUploadedExcelFile(null);
-                        }}
-                        className="btn btn-primary"
-                        style={{ padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
-                      >
-                        Add Users
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+                <button type="submit" className="btn btn-primary" style={{ padding: '12px 20px' }}>
+                  Add User
+                </button>
+              </form>
             </div>
 
             {/* Users List Table */}
@@ -717,7 +628,12 @@ export default function AdminDashboard({
                               >
                                 <Edit size={14} />
                               </button>
-                              <button onClick={() => deleteUser(u.id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+                              <button 
+                                onClick={() => setUserToDelete(u)} 
+                                className="btn btn-secondary" 
+                                style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                title="Delete User"
+                              >
                                 <Trash2 size={14} />
                               </button>
                             </div>
@@ -744,7 +660,7 @@ export default function AdminDashboard({
                       batch: editRole === 'Teacher' ? editSubject : ''
                     });
                     setEditingUser(null);
-                    alert('User details updated successfully!');
+                    setEditSuccessModal(true);
                   }}
                   className="glass-panel" 
                   style={{ width: '480px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)' }}
@@ -1019,6 +935,63 @@ export default function AdminDashboard({
           </div>
         )}
       </main>
+
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '420px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <AlertTriangle size={44} style={{ color: 'var(--danger)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Confirm to Delete</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+              Are you sure you want to permanently delete user <strong>{userToDelete.name}</strong> ({userToDelete.email})?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 22px' }}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteUser(userToDelete.id);
+                  setUserToDelete(null);
+                  setActiveTab('userManagement');
+                }}
+                className="btn btn-primary"
+                style={{ padding: '8px 22px', background: 'var(--danger)', borderColor: 'var(--danger)' }}
+              >
+                Confirm to Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Success Modal */}
+      {editSuccessModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Edited Successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>User details have been updated successfully in the Active User Database.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setEditSuccessModal(false);
+                setActiveTab('userManagement');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

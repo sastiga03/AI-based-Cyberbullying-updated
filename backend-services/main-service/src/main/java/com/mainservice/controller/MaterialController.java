@@ -37,6 +37,7 @@ public class MaterialController {
         m.setFileName(request.getFileName());
         m.setFileUrl(request.getFileUrl());
         m.setDate(LocalDate.now());
+        m.setDept(request.getDept() != null ? request.getDept() : "Computer Science & Engineering");
 
         Material saved = materialRepository.save(m);
         return ResponseEntity.ok(saved);

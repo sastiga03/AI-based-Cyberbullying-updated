@@ -24,8 +24,18 @@ function App() {
 
   // Navigation states
   // 'landing' | 'login' | 'student' | 'teacher' | 'counselor' | 'admin' | 'principal'
-  const [page, setPage] = useState('landing');
-  const [currentUser, setCurrentUser] = useState(null);
+  const [page, setPage] = useState(() => localStorage.getItem('currentPage') || 'landing');
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Keep currentPage synced to localStorage
+  useEffect(() => {
+    if (page) {
+      localStorage.setItem('currentPage', page);
+    }
+  }, [page]);
 
   // App Database States (loaded dynamically from Spring Boot backend)
   const [announcements, setAnnouncements] = useState([]);
@@ -194,7 +204,20 @@ function App() {
       const res = await fetch('http://localhost:8082/api/counseling-slots?all=true', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) setCounselingSlots(await res.json());
+      if (res.ok) {
+        const backendSlots = await res.json();
+        const cached = JSON.parse(localStorage.getItem('cached_counseling_slots') || '[]');
+        const merged = [...backendSlots];
+        cached.forEach(cSlot => {
+          const idx = merged.findIndex(s => String(s.id) === String(cSlot.id));
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...cSlot };
+          } else {
+            merged.push(cSlot);
+          }
+        });
+        setCounselingSlots(merged);
+      }
     } catch (e) { console.error("Error loading slots:", e); }
 
     // 9. Fetch student messages (Teacher inbox)
@@ -225,15 +248,38 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const savedUserStr = localStorage.getItem('user');
+    const savedPage = localStorage.getItem('currentPage');
     if (token && savedUserStr) {
       try {
         const savedUser = JSON.parse(savedUserStr);
         setCurrentUser(savedUser);
-        setPage(savedUser.role.toLowerCase());
+        if (savedPage) {
+          setPage(savedPage);
+        } else if (savedUser.role) {
+          setPage(savedUser.role.toLowerCase());
+        }
+
+        // Fetch fresh profile from backend to ensure profilePhotoUrl is up to date
+        fetch('http://localhost:8081/api/users/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => res.ok ? res.json() : null)
+          .then(freshProfile => {
+            if (freshProfile) {
+              setCurrentUser(prev => {
+                const merged = { ...(prev || {}), ...freshProfile };
+                localStorage.setItem('user', JSON.stringify(merged));
+                return merged;
+              });
+            }
+          })
+          .catch(e => {});
       } catch (e) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
+    } else if (savedPage) {
+      setPage(savedPage);
     }
   }, []);
 
@@ -250,12 +296,16 @@ function App() {
 
   const handleLogin = (userCredentials) => {
     setCurrentUser(userCredentials);
-    setPage(userCredentials.role.toLowerCase()); // e.g. redirects to 'student', 'teacher', etc.
+    localStorage.setItem('user', JSON.stringify(userCredentials));
+    const targetPage = userCredentials.role ? userCredentials.role.toLowerCase() : 'landing';
+    setPage(targetPage);
+    localStorage.setItem('currentPage', targetPage);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('currentPage');
     setCurrentUser(null);
     setPage('landing');
   };
@@ -371,15 +421,17 @@ function App() {
     } catch (e) { console.error(e); }
   };
 
-  // 7. Counselor resolves a case (removes it from database)
+  // 7. Counselor resolves a case
   const resolveCase = async (caseId, decisionText) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/cases/${caseId}`, {
-        method: 'DELETE',
+      await fetch(`http://localhost:8082/api/cases/${caseId}/resolve`, {
+        method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ decision: decisionText || 'Resolved' })
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -474,7 +526,11 @@ function App() {
       });
       if (response.ok) {
         const updated = await response.json();
-        setCurrentUser(prev => ({ ...prev, ...updated }));
+        setCurrentUser(prev => {
+          const next = { ...(prev || {}), ...updated };
+          localStorage.setItem('user', JSON.stringify(next));
+          return next;
+        });
       }
     } catch (e) { console.error(e); }
   };
@@ -497,9 +553,28 @@ function App() {
 
   // 14. Handler to book a counseling slot
   const bookCounseling = async (slotDetails) => {
+    const tempId = Date.now().toString();
+    const newSlot = {
+      id: tempId,
+      studentName: slotDetails.studentName || currentUser?.name || 'Harshini Sasti',
+      rollNo: slotDetails.rollNo || '23CSE101',
+      dept: slotDetails.dept || 'Computer Science & Engineering',
+      reason: slotDetails.reason,
+      status: 'Pending',
+      timings: '',
+      counselorName: 'Meena Jegan'
+    };
+
+    setCounselingSlots(prev => [...(prev || []), newSlot]);
+
+    try {
+      const cached = JSON.parse(localStorage.getItem('cached_counseling_slots') || '[]');
+      localStorage.setItem('cached_counseling_slots', JSON.stringify([...cached, newSlot]));
+    } catch (e) {}
+
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8082/api/counseling-slots', {
+      const res = await fetch('http://localhost:8082/api/counseling-slots', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -507,24 +582,45 @@ function App() {
         },
         body: JSON.stringify(slotDetails)
       });
+      if (res.ok) {
+        const saved = await res.json();
+        setCounselingSlots(prev => (prev || []).map(s => String(s.id) === String(tempId) ? saved : s));
+      }
       refreshData();
     } catch (e) { console.error(e); }
   };
 
-  // 15. Handler to approve a counseling slot (also handles rescheduling)
-  const approveCounselingSlot = async (slotId, timings) => {
+  // 15. Handler to approve / update a counseling slot (handles timings, status, and reschedule)
+  const updateCounselingSlot = async (slotId, updateData) => {
+    setCounselingSlots(prev => (prev || []).map(slot => 
+      String(slot.id) === String(slotId) ? { ...slot, ...updateData } : slot
+    ));
+
+    try {
+      const cached = JSON.parse(localStorage.getItem('cached_counseling_slots') || '[]');
+      const updated = cached.map(slot => String(slot.id) === String(slotId) ? { ...slot, ...updateData } : slot);
+      if (!updated.some(s => String(s.id) === String(slotId))) {
+        updated.push({ id: slotId, ...updateData });
+      }
+      localStorage.setItem('cached_counseling_slots', JSON.stringify(updated));
+    } catch (e) {}
+
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/counseling-slots/${slotId}/approve`, {
+      await fetch(`http://localhost:8082/api/counseling-slots/${slotId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ timings })
+        body: JSON.stringify(updateData)
       });
       refreshData();
     } catch (e) { console.error(e); }
+  };
+
+  const approveCounselingSlot = async (slotId, timings) => {
+    return updateCounselingSlot(slotId, { status: 'Approved', timings });
   };
 
   // 16. Handler to add a principal announcement
@@ -630,6 +726,7 @@ function App() {
           forwardedMessages={forwardedMessages}
           forwardedSubmissions={forwardedSubmissions}
           uploadFile={uploadFile}
+          users={users}
         />
       )}
 
@@ -645,6 +742,7 @@ function App() {
           toggleTheme={toggleTheme}
           counselingSlots={counselingSlots}
           approveCounselingSlot={approveCounselingSlot}
+          updateCounselingSlot={updateCounselingSlot}
           announcements={announcements}
           readAnnouncements={readAnnouncements}
           markAnnouncementAsRead={markAnnouncementAsRead}

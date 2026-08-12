@@ -1,8 +1,8 @@
 import { 
-  MessageSquare, Bell, FileText, CheckCircle2, User, LogOut, 
+  MessageSquare, Bell, FileText, CheckCircle, CheckCircle2, User, LogOut, 
   UploadCloud, Send, ShieldAlert, BookOpen, Settings, AlertTriangle, 
   Paperclip, Camera, Save, Info, UserCheck, Phone, MapPin, Calendar,
-  Sun, Moon, Clock
+  Sun, Moon, Clock, Download, Check, RefreshCw
 } from 'lucide-react';
 import React, { useState, useRef, useEffect } from 'react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
@@ -30,9 +30,16 @@ export default function StudentDashboard({
   cases = [],
   uploadFile
 }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('student_active_tab') || 'dashboard');
   const [selectedContact, setSelectedContact] = useState(null);
   const [chatInputs, setChatInputs] = useState({ 'Jan She': '', 'Sanshetha S': '' });
+  
+  const [taskSuccessModal, setTaskSuccessModal] = useState(false);
+  const [reportSuccessModal, setReportSuccessModal] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('student_active_tab', activeTab);
+  }, [activeTab]);
   
   const messagesEndRef = useRef(null);
   
@@ -136,7 +143,12 @@ export default function StudentDashboard({
   }, [users, user.dept, departmentalTeachers]);
 
   // Settings State
-  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
+
+  useEffect(() => {
+    setProfilePhoto(user?.profilePhotoUrl || null);
+  }, [user?.profilePhotoUrl]);
+
   const [age, setAge] = useState(user.age || '20');
   const [phone, setPhone] = useState(user.phone || '+91 98765 43210');
   const [address, setAddress] = useState(user.address || 'KCE Student Hostel, Coimbatore');
@@ -235,30 +247,65 @@ export default function StudentDashboard({
       comment: taskComment
     });
 
-    alert('Task Submitted');
-    setSelectedTaskToSubmit(null);
-    setUploadedFile(null);
-    setTaskComment('');
-    setTasksFilter('submitted'); // Show submitted tasks tab
-    setActiveTab('tasks'); // Redirect to Tasks Main page
+    setTaskSuccessModal(true);
   };
 
-  // Programmatic file downloader for submissions
-  const handleDownloadFile = (fileName, fileUrl) => {
-    if (fileUrl) {
-      window.open('http://localhost:8082' + fileUrl, '_blank');
-      return;
+  // Programmatic file downloader for submissions & resources directly to disk
+  const handleDownloadFile = async (fileName, fileUrl, title) => {
+    const cleanFileName = fileName || `${(title || 'academic_document').replace(/\s+/g, '_')}.pdf`;
+
+    try {
+      if (fileUrl && fileUrl.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = cleanFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      const cached = localStorage.getItem(`material_file_${cleanFileName}`) || localStorage.getItem(`material_file_${fileName}`);
+      if (cached && cached.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = cached;
+        a.download = cleanFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      if (fileUrl) {
+        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://localhost:8082${fileUrl}`;
+        const res = await fetch(fullUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = cleanFileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Error downloading file", e);
     }
-    const content = `Karpagam College of Engineering - SafeGuard Platform\n\nThis is a download of submission file: ${fileName}\nSubmitted by: ${user.name}\nTimestamp: ${new Date().toLocaleString()}`;
-    const blob = new Blob([content], { type: 'text/plain' });
+
+    const content = `Karpagam College of Engineering - SafeGuard Platform\n\nAcademic Document: ${cleanFileName}\nUser: ${user.name}\nTimestamp: ${new Date().toLocaleString()}`;
+    const blob = new Blob([content], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = fileName.includes('.') ? fileName : fileName + '.pdf';
+    link.download = cleanFileName.includes('.') ? cleanFileName : cleanFileName + '.pdf';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Handles reporting issue
@@ -276,11 +323,7 @@ export default function StudentDashboard({
       teacherName: selectedTeacherName
     });
 
-    alert('Report submitted successfully to Teacher and Counselor.');
-    setIssueType('Cyber bullying');
-    setIssueDesc('');
-    setIssueFile(null);
-    setActiveTab('dashboard'); // Redirect to Dashboard
+    setReportSuccessModal(true);
   };
 
   // Chat message send
@@ -306,7 +349,8 @@ export default function StudentDashboard({
       phone,
       address,
       dept,
-      batch
+      batch,
+      profilePhotoUrl: profilePhoto
     });
 
     alert('Changes Saved');
@@ -324,7 +368,9 @@ export default function StudentDashboard({
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProfilePhoto(event.target.result);
+        const photoUrl = event.target.result;
+        setProfilePhoto(photoUrl);
+        updateProfile({ profilePhotoUrl: photoUrl });
       };
       reader.readAsDataURL(e.target.files[0]);
     }
@@ -1199,118 +1245,155 @@ export default function StudentDashboard({
 
         {/* Book Counseling View */}
         {activeTab === 'bookCounseling' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'start' }}>
-            {/* Left Column: Previous Sessions History */}
-            <div className="glass-panel" style={{ padding: '24px', maxHeight: '600px', overflowY: 'auto' }}>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Previous Sessions</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '16px' }}>
-                Your approved counseling session history.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {counselingSlots.filter(s => s.studentName === user.name && s.status === 'Approved').length === 0 ? (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
-                    No previous approved sessions.
-                  </p>
-                ) : (
-                  counselingSlots.filter(s => s.studentName === user.name && s.status === 'Approved').map(slot => (
-                    <div key={slot.id} style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '3px solid var(--success)' }}>
-                      <h4 style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '4px' }}>Meena Jegan</h4>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                        Reason: {slot.reason}
-                      </p>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={12} />
-                        {slot.timings}
-                      </span>
-                    </div>
-                  ))
-                )}
+          <div className="glass-panel" style={{ padding: '32px', maxWidth: '640px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.4rem', marginBottom: '4px' }}>Book Counselor Session</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  Connect with Karpagam College of Engineering's student counseling services.
+                </p>
               </div>
+              {!showCounselingForm && (
+                <button 
+                  onClick={() => setShowCounselingForm(true)} 
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  <Calendar size={16} />
+                  <span>Book Counseling</span>
+                </button>
+              )}
             </div>
 
-            {/* Right Column: Book / Status Box */}
-            <div className="glass-panel" style={{ padding: '32px' }}>
-              <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Book Counselor Session</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
-                Connect with Karpagam College of Engineering's student counseling services.
-              </p>
-
-              {showCounselingForm ? (
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  bookCounseling({
-                    email: user.email,
-                    dept: counselingDept,
-                    reason: counselingReason
+            {showCounselingForm ? (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                bookCounseling({
+                  studentName: user.name,
+                  rollNo: counselingRollNo,
+                  dept: counselingDept,
+                  reason: counselingReason,
+                  email: user.email
+                });
+                setShowCounselingSuccess(true);
+              }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Student Name</label>
+                  <input type="text" className="form-input" value={user.name} disabled style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed' }} />
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Roll No *</label>
+                  <input type="text" className="form-input" value={counselingRollNo} onChange={(e) => setCounselingRollNo(e.target.value)} required placeholder="eg. 23CS101" />
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Department *</label>
+                  <input type="text" className="form-input" value={counselingDept} onChange={(e) => setCounselingDept(e.target.value)} required />
+                </div>
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Reason textbox *</label>
+                  <textarea className="form-input" rows="4" value={counselingReason} onChange={(e) => setCounselingReason(e.target.value)} required placeholder="Describe what you'd like to discuss..." />
+                </div>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => setShowCounselingForm(false)} className="btn btn-secondary">Cancel</button>
+                  <button type="submit" className="btn btn-primary">Request Counselor</button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                {(() => {
+                  const validStudentSlots = (counselingSlots || []).filter(s => {
+                    if (!s) return false;
+                    const r = String(s.reason || '').toLowerCase().trim();
+                    if (r.includes('experiencing stress regarding exam schedule')) return false;
+                    if (r.includes('i wanna talk to you') || r.includes('wanna talk')) return false;
+                    return true;
                   });
-                  setShowCounselingSuccess(true);
-                }}>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Student Name</label>
-                    <input type="text" className="form-input" value={user.name} disabled style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed' }} />
-                  </div>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Roll No / Email *</label>
-                    <input type="text" className="form-input" value={counselingRollNo} onChange={(e) => setCounselingRollNo(e.target.value)} required placeholder="eg. studentp101@kce.ac.in" />
-                  </div>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Department *</label>
-                    <input type="text" className="form-input" value={counselingDept} onChange={(e) => setCounselingDept(e.target.value)} required />
-                  </div>
-                  <div style={{ marginBottom: '24px' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Reason textbox *</label>
-                    <textarea className="form-input" rows="4" value={counselingReason} onChange={(e) => setCounselingReason(e.target.value)} required placeholder="Describe what you'd like to discuss..." />
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                    <button type="button" onClick={() => setShowCounselingForm(false)} className="btn btn-secondary">Cancel</button>
-                    <button type="submit" className="btn btn-primary">Request Counselor</button>
-                  </div>
-                </form>
-              ) : (
-                <div>
-                  {(() => {
-                    const mySlots = counselingSlots.filter(s => s.studentName === user.name);
-                    const myPendingSlot = mySlots.find(s => s.status === 'Pending');
-                    const myApprovedSlot = mySlots.find(s => s.status === 'Approved');
-                    const currentSlot = myPendingSlot || myApprovedSlot;
-                    
-                    return (
-                      <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px', background: 'var(--bg-tertiary)' }}>
+
+                  const mySlots = validStudentSlots.filter(s => {
+                    if (!s.studentName) return true;
+                    const sName = String(s.studentName).trim().toLowerCase();
+                    const uName = String(user?.name || '').trim().toLowerCase();
+                    const uEmail = String(user?.email || '').trim().toLowerCase();
+                    return sName === uName || sName === uEmail || (uName && (sName.includes(uName) || uName.includes(sName)));
+                  });
+
+                  const latestSlot = mySlots.length > 0 ? mySlots[mySlots.length - 1] : null;
+                  const isFinished = latestSlot && latestSlot.status === 'Finished';
+                  const isPending = latestSlot && latestSlot.status === 'Pending';
+
+                  return (
+                    <div 
+                      className="glass-panel" 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '16px', 
+                        padding: '24px', 
+                        background: isFinished ? 'rgba(16, 185, 129, 0.08)' : (isPending && latestSlot?.timings) ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-tertiary)',
+                        borderLeft: isFinished ? '5px solid var(--success)' : (isPending && latestSlot?.timings) ? '5px solid var(--danger)' : '5px solid var(--primary)',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.3rem', fontWeight: 'bold' }}>
+                          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: isFinished ? 'var(--success)' : (isPending && latestSlot?.timings) ? 'var(--danger)' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.3rem', fontWeight: 'bold' }}>
                             MJ
                           </div>
                           <div>
-                            <h3 style={{ fontSize: '1.15rem', fontWeight: 'bold' }}>Meena Jegan</h3>
+                            <h3 style={{ fontSize: '1.15rem', fontWeight: 'bold' }}>{latestSlot?.counselorName || 'Meena Jegan'}</h3>
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Student Counselor</p>
-                            {currentSlot && currentSlot.status === 'Approved' && (
-                              <p style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 'bold', marginTop: '6px' }}>
-                                Timing Slot: {currentSlot.timings}
-                              </p>
-                            )}
                           </div>
                         </div>
+
+                        {latestSlot && (
+                          <span className={`badge ${isFinished ? 'badge-success' : (isPending && latestSlot?.timings) ? 'badge-danger' : 'badge-info'}`} style={{ fontSize: '0.85rem', padding: '6px 12px' }}>
+                            {latestSlot.status}
+                          </span>
+                        )}
+                      </div>
+
+                      {latestSlot ? (
                         <div>
-                          {!currentSlot ? (
-                            <button onClick={() => setShowCounselingForm(true)} className="btn btn-primary">
-                              Book Counseling
-                            </button>
-                          ) : currentSlot.status === 'Pending' ? (
-                            <button disabled className="btn btn-secondary" style={{ cursor: 'not-allowed', color: 'var(--text-muted)' }}>
-                              Not Yet Approved
-                            </button>
-                          ) : (
-                            <button disabled className="btn btn-primary" style={{ background: 'var(--success)', cursor: 'not-allowed', borderColor: 'var(--success)', color: '#fff' }}>
-                              Approved
-                            </button>
+                          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                            <strong>Reason:</strong> {latestSlot.reason}
+                          </p>
+
+                          {latestSlot.timings && (
+                            <p style={{ fontSize: '0.9rem', color: isFinished ? 'var(--success)' : (isPending && latestSlot?.timings) ? 'var(--danger)' : 'var(--primary)', fontWeight: 'bold', marginBottom: '8px' }}>
+                              Scheduled Timing: {latestSlot.timings}
+                            </p>
+                          )}
+
+                          {isFinished && (
+                            <div style={{ marginTop: '8px', padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', borderRadius: '6px', color: 'var(--success)', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <CheckCircle2 size={18} />
+                              <span>Counselling ended successfully</span>
+                            </div>
+                          )}
+
+                          {isPending && latestSlot?.timings && (
+                            <div style={{ marginTop: '12px' }}>
+                              <button 
+                                onClick={() => setShowCounselingForm(true)} 
+                                className="btn btn-secondary"
+                                style={{ borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '0.85rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                              >
+                                <RefreshCw size={14} />
+                                <span>ReSchedule Counseling</span>
+                              </button>
+                            </div>
                           )}
                         </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-muted)' }}>
+                          <p style={{ fontSize: '0.85rem' }}>No active counseling booked yet. Click "Book Counseling" above to request a session.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {/* Counseling Booking Success Pop-up Modal */}
             {showCounselingSuccess && (
@@ -1336,112 +1419,255 @@ export default function StudentDashboard({
           </div>
         )}
 
-        {/* Materials View */}
+        {/* 6. Materials View */}
         {activeTab === 'materials' && (
           <div className="glass-panel" style={{ padding: '32px' }}>
-            {selectedTeacherMaterials ? (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            {(() => {
+              const getCanonicalTeacherName = (rawName) => {
+                if (!rawName) return '';
+                const trimmed = rawName.trim();
+                const clean = trimmed.replace(/^prof\.?\s*/i, '').replace(/^dr\.?\s*/i, '').replace(/^mr\.?\s*/i, '').replace(/^mrs\.?\s*/i, '').replace(/\s+/g, ' ').trim();
+                
+                if (clean.toLowerCase().includes('anand')) return 'Prof. Anand Kumar';
+                if (clean.toLowerCase().includes('rak') || clean.toLowerCase().includes('karnan')) return 'Prof. Rak Karnan';
+                if (clean.toLowerCase().includes('suresh')) return 'Prof. Suresh Kumar';
+                
+                const matchUser = (users || []).find(u => {
+                  const un = (u.name || '').toLowerCase().replace(/^prof\.?\s*/i, '').replace(/\s+/g, '');
+                  return un === clean.toLowerCase().replace(/\s+/g, '');
+                });
+                if (matchUser) return matchUser.name.startsWith('Prof.') ? matchUser.name : `Prof. ${matchUser.name}`;
+
+                return trimmed.startsWith('Prof.') ? trimmed : `Prof. ${trimmed}`;
+              };
+
+              const normalizeTeacherName = (name) => {
+                if (!name) return '';
+                return name
+                  .toLowerCase()
+                  .replace(/^prof\.?\s*/i, '')
+                  .replace(/^dr\.?\s*/i, '')
+                  .replace(/^mr\.?\s*/i, '')
+                  .replace(/^mrs\.?\s*/i, '')
+                  .replace(/\s+/g, '')
+                  .trim();
+              };
+
+              const isTeacherMatch = (name1, name2) => {
+                if (!name1 || !name2) return false;
+                const n1 = normalizeTeacherName(name1);
+                const n2 = normalizeTeacherName(name2);
+                return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+              };
+
+              const normalizeDept = (dept) => {
+                if (!dept) return 'cse';
+                const d = dept.trim().toLowerCase();
+                if (d.includes('cse') || d.includes('computer')) return 'cse';
+                if (d.includes('it') || d.includes('information')) return 'it';
+                if (d.includes('ai') || d.includes('artificial') || d.includes('ad')) return 'ai';
+                if (d.includes('ece') || d.includes('electronic') || d.includes('comm')) return 'ece';
+                if (d.includes('civil')) return 'civil';
+                if (d.includes('mech')) return 'mech';
+                if (d.includes('eee') || d.includes('electrical')) return 'eee';
+                return d;
+              };
+
+              const isDeptMatch = (dept1, dept2) => {
+                if (!dept1 || !dept2) return true;
+                return normalizeDept(dept1) === normalizeDept(dept2);
+              };
+
+              if (selectedTeacherMaterials) {
+                // Find all materials matching this selected teacher
+                const teacherMaterials = (materials || []).filter(m => {
+                  return getCanonicalTeacherName(m.teacherName) === selectedTeacherMaterials || isTeacherMatch(m.teacherName, selectedTeacherMaterials);
+                });
+
+                return (
                   <div>
-                    <h2 style={{ fontSize: '1.4rem' }}>{selectedTeacherMaterials}'s Classroom</h2>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Access and download educational reference materials.</p>
+                    <button 
+                      onClick={() => setSelectedTeacherMaterials(null)} 
+                      className="btn btn-secondary" 
+                      style={{ marginBottom: '20px', fontSize: '0.85rem', padding: '6px 14px' }}
+                    >
+                      ← Back to Teachers
+                    </button>
+
+                    <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>
+                      Materials by {selectedTeacherMaterials}
+                    </h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
+                      Access course materials, notes, and academic references posted for your department.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {teacherMaterials.map(mat => {
+                        const isRead = readMaterials.includes(mat.id);
+
+                        return (
+                          <div key={mat.id} className="glass-panel" style={{ padding: '22px', background: 'var(--bg-tertiary)', borderLeft: isRead ? '4px solid var(--border-glass)' : '4px solid var(--primary)', opacity: isRead ? 0.85 : 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                              <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{mat.title}</h3>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {isRead && (
+                                  <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
+                                    Read
+                                  </span>
+                                )}
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{mat.date}</span>
+                              </div>
+                            </div>
+
+                            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.6' }}>
+                              {mat.description}
+                            </p>
+
+                            {mat.fileName && (
+                              <div 
+                                onClick={() => handleDownloadFile(mat.fileName, mat.fileUrl, mat.title)}
+                                style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: '8px', 
+                                  padding: '8px 14px', 
+                                  background: 'var(--bg-secondary)', 
+                                  borderRadius: '6px', 
+                                  border: '1px solid var(--border-glass)',
+                                  cursor: 'pointer',
+                                  marginBottom: '16px'
+                                }}
+                                title="Click to download original file"
+                              >
+                                <FileText size={16} style={{ color: 'var(--primary)' }} />
+                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--primary)', textDecoration: 'underline' }}>
+                                  {mat.fileName}
+                                </span>
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-glass)' }}>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                Faculty: <strong>{getCanonicalTeacherName(mat.teacherName)}</strong> {mat.dept ? `(${mat.dept})` : ''}
+                              </span>
+                              <div style={{ display: 'flex', gap: '10px' }}>
+                                {isRead ? (
+                                  <button 
+                                    disabled 
+                                    className="btn btn-secondary" 
+                                    style={{ fontSize: '0.8rem', padding: '6px 14px', opacity: 0.6, cursor: 'default', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                  >
+                                    <Check size={14} style={{ color: 'var(--success)' }} />
+                                    <span>Read</span>
+                                  </button>
+                                ) : (
+                                  <button 
+                                    onClick={() => handleMarkMaterialAsRead(mat.id)} 
+                                    className="btn btn-secondary" 
+                                    style={{ fontSize: '0.8rem', padding: '6px 14px', borderColor: 'var(--primary)', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                  >
+                                    <CheckCircle2 size={14} />
+                                    <span>Mark as Read</span>
+                                  </button>
+                                )}
+
+                                <button 
+                                  onClick={() => handleDownloadFile(mat.fileName, mat.fileUrl, mat.title)}
+                                  className="btn btn-primary" 
+                                  style={{ fontSize: '0.8rem', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                  <Download size={14} />
+                                  <span>Download PDF</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {teacherMaterials.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                          <p style={{ fontSize: '1rem', marginBottom: '8px' }}>No materials posted by {selectedTeacherMaterials} yet.</p>
+                          <p style={{ fontSize: '0.8rem' }}>Check back later or explore resources from other department teachers.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <button onClick={() => setSelectedTeacherMaterials(null)} className="btn btn-secondary">
-                    Back to Teachers list
-                  </button>
-                </div>
+                );
+              }
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {materials
-                    .filter(m => {
-                      if (selectedTeacherMaterials === 'Anand Kumar') {
-                        return m.teacherName === 'AnandKumar' || m.teacherName === 'Anand Kumar';
-                      }
-                      return m.teacherName === selectedTeacherMaterials;
-                    })
-                    .map(mat => (
-                      <div key={mat.id} className="glass-panel" style={{ padding: '20px', background: 'var(--bg-tertiary)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{mat.title}</h3>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{mat.date}</span>
-                        </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px', lineHeight: '1.5' }}>
-                          {mat.description}
-                        </p>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <FileText size={18} style={{ color: 'var(--primary)' }} />
-                            <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{mat.fileName}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <button 
-                              onClick={() => handleMarkMaterialAsRead(mat.id)}
-                              disabled={readMaterials.includes(mat.id)}
-                              className="btn btn-secondary"
-                              style={{ padding: '6px 12px', fontSize: '0.8rem', opacity: readMaterials.includes(mat.id) ? 0.6 : 1, cursor: readMaterials.includes(mat.id) ? 'not-allowed' : 'pointer' }}
-                            >
-                              {readMaterials.includes(mat.id) ? 'Read' : 'Mark as Read'}
-                            </button>
-                            <button 
-                              onClick={() => {
-                                if (mat.fileUrl) {
-                                  window.open('http://localhost:8082' + mat.fileUrl, '_blank');
-                                  return;
-                                }
-                                alert(`Simulating file download: ${mat.fileName}`);
-                                const element = document.createElement("a");
-                                const file = new Blob([`Simulated content for academic resource: ${mat.fileName}`], {type: 'text/plain'});
-                                element.href = URL.createObjectURL(file);
-                                element.download = mat.fileName;
-                                document.body.appendChild(element);
-                                element.click();
-                                document.body.removeChild(element);
-                              }} 
-                              className="btn btn-primary" 
-                              style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                            >
-                              Download
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  {materials.filter(m => {
-                    if (selectedTeacherMaterials === 'Anand Kumar') {
-                      return m.teacherName === 'AnandKumar' || m.teacherName === 'Anand Kumar';
-                    }
-                    return m.teacherName === selectedTeacherMaterials;
-                  }).length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                      No materials posted by this teacher yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Teacher Materials & Classrooms</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
-                  Select a faculty member below to view posted resources and download files.
-                </p>
+              // 1. Gather all teachers from materials
+              const deptMaterials = (materials || []).filter(m => isDeptMatch(m.dept, user.dept));
+              const activeMaterials = deptMaterials.length > 0 ? deptMaterials : (materials || []);
+              const materialTeacherNames = Array.from(new Set(activeMaterials.map(m => getCanonicalTeacherName(m.teacherName)).filter(Boolean)));
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
-                  {[
-                    { name: 'Anand Kumar', subjects: 'Data Structures, DBMS' },
-                    { name: 'Prof. Rak Karnan', subjects: 'Computational Methods, Algorithm Analysis' },
-                    { name: 'Prof. Suresh Kumar', subjects: 'Computer Networks' }
-                  ].map((teacher, idx) => (
-                    <div key={idx} onClick={() => setSelectedTeacherMaterials(teacher.name)} className="glass-panel glass-panel-hover" style={{ padding: '24px', cursor: 'pointer', textAlign: 'center', background: 'var(--bg-tertiary)' }}>
-                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '1.5rem', fontWeight: 'bold' }}>
-                        {teacher.name.replace('Prof.', '').trim().split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '6px' }}>{teacher.name}</h3>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{teacher.subjects}</p>
-                    </div>
-                  ))}
+              // 2. Teachers from users database
+              const registeredTeachers = (users || [])
+                .filter(u => u.role === 'Teacher' && isDeptMatch(u.dept, user.dept))
+                .map(u => getCanonicalTeacherName(u.name));
+
+              // 3. Standard Department Faculty for CSE
+              const defaultFaculty = isDeptMatch(user.dept, 'CSE') ? ['Prof. Anand Kumar', 'Prof. Rak Karnan', 'Prof. Suresh Kumar'] : [];
+
+              // Combined UNIQUE Canonical Teachers
+              const uniqueTeachers = Array.from(new Set([
+                ...materialTeacherNames,
+                ...registeredTeachers,
+                ...defaultFaculty
+              ])).filter(Boolean);
+
+              return (
+                <div>
+                  <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Teacher Materials & Classrooms</h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
+                    Select a faculty member from your department (<strong>{user.dept || 'Computer Science & Engineering'}</strong>) to view posted materials.
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+                    {uniqueTeachers.map((teacherName, idx) => {
+                      const teacherObj = (users || []).find(u => getCanonicalTeacherName(u.name) === teacherName || isTeacherMatch(u.name, teacherName));
+                      const teacherMats = (materials || []).filter(m => {
+                        return getCanonicalTeacherName(m.teacherName) === teacherName || isTeacherMatch(m.teacherName, teacherName);
+                      });
+
+                      const totalMatsCount = teacherMats.length;
+                      const unreadCount = teacherMats.filter(m => !readMaterials.includes(m.id)).length;
+                      const initial = teacherName.replace(/^prof\.?\s*/i, '').trim()[0] || 'T';
+
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => setSelectedTeacherMaterials(teacherName)} 
+                          className="glass-panel glass-panel-hover" 
+                          style={{ padding: '24px', cursor: 'pointer', textAlign: 'center', background: 'var(--bg-tertiary)' }}
+                        >
+                          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                            {initial}
+                          </div>
+                          <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '6px' }}>{teacherName}</h3>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {teacherObj?.batch || (teacherMats.length > 0 ? teacherMats.map(m => m.title).slice(0, 2).join(', ') : 'Faculty Course Incharge')}
+                          </p>
+                          {totalMatsCount === 0 ? (
+                            <span className="badge badge-secondary" style={{ marginTop: '10px', fontSize: '0.75rem', opacity: 0.8 }}>
+                              no materials
+                            </span>
+                          ) : unreadCount > 0 ? (
+                            <span className="badge badge-info" style={{ marginTop: '10px', fontSize: '0.75rem' }}>
+                              {unreadCount} {unreadCount === 1 ? 'material' : 'materials'}
+                            </span>
+                          ) : (
+                            <span className="badge badge-success" style={{ marginTop: '10px', fontSize: '0.75rem' }}>
+                              All Read ✓
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -1542,6 +1768,56 @@ export default function StudentDashboard({
           </div>
         )}
       </main>
+
+      {/* Task Submitted Success Modal */}
+      {taskSuccessModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Task Submitted Successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>Your assignment file and response have been uploaded successfully.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setTaskSuccessModal(false);
+                setSelectedTaskToSubmit(null);
+                setUploadedFile(null);
+                setTaskComment('');
+                setActiveTab('tasks');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Report Submitted Success Modal */}
+      {reportSuccessModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '400px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center' }}>
+            <CheckCircle size={44} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>Report Submitted to Teacher Successfully</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>Your report statement has been delivered securely to your teacher.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setReportSuccessModal(false);
+                setIssueType('Cyber bullying');
+                setIssueDesc('');
+                setIssueFile(null);
+                setActiveTab('report');
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

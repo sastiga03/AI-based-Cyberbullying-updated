@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   MessageSquare, User, LogOut, Settings, AlertTriangle, 
   Camera, Save, ShieldAlert, CheckCircle2, RefreshCw, Bookmark, BookOpen,
@@ -12,19 +12,24 @@ export default function CounselorDashboard({
   cases, 
   resolveCase, 
   messages, 
-  updateProfile,
-  theme,
-  toggleTheme,
-  counselingSlots,
-  approveCounselingSlot,
-  announcements,
-  readAnnouncements = [],
-  markAnnouncementAsRead,
-  forwardedMessages = [],
-  readCounselorMessages = [],
+  updateProfile, 
+  theme, 
+  toggleTheme, 
+  counselingSlots, 
+  approveCounselingSlot, 
+  updateCounselingSlot,
+  announcements, 
+  readAnnouncements = [], 
+  markAnnouncementAsRead, 
+  forwardedMessages = [], 
+  readCounselorMessages = [], 
   markCounselorMessageAsRead
 }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('counselor_active_tab') || 'dashboard');
+
+  useEffect(() => {
+    localStorage.setItem('counselor_active_tab', activeTab);
+  }, [activeTab]);
   
   const isNameMatch = (name1, name2) => {
     const n1 = (name1 || '').trim().toLowerCase();
@@ -51,15 +56,22 @@ export default function CounselorDashboard({
   // Cases dropdown filter
   const [caseFilterDropdown, setCaseFilterDropdown] = useState('All'); // 'All' | 'Pending' | 'Resolved'
 
-  // Counseling Slot Timings
-  const [slotTimings, setSlotTimings] = useState({});
-  const [editingSlotId, setEditingSlotId] = useState(null);
+  // Counseling Slot Timings & Statuses
+  const [slotDates, setSlotDates] = useState({});
+  const [slotTimes, setSlotTimes] = useState({});
+  const [slotStatuses, setSlotStatuses] = useState({});
+  const [submittedSlots, setSubmittedSlots] = useState({});
 
   // Announcements ref
   const announcementsRef = useRef(null);
 
   // Settings states
-  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
+
+  useEffect(() => {
+    setProfilePhoto(user?.profilePhotoUrl || null);
+  }, [user?.profilePhotoUrl]);
+
   const [age, setAge] = useState(user.age || '38');
   const [phone, setPhone] = useState(user.phone || '+91 97890 54321');
   const [address, setAddress] = useState(user.address || 'KCE Counseling Center, Coimbatore');
@@ -82,17 +94,26 @@ export default function CounselorDashboard({
     { name: 'Mouna', dept: 'CSE', incident: 'Mocking', severity: '47%', flags: 2 }
   ];
 
+  const isTimePassed = (timingStr) => {
+    if (!timingStr) return false;
+    const clean = timingStr.replace(' at ', ' ');
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      return d.getTime() <= Date.now();
+    }
+    return false;
+  };
+
   // Action click handler
   const handleCaseAction = (caseId, decisionText) => {
     resolveCase(caseId, decisionText);
-    alert('Noted');
-    setActiveTab('pendingCases'); // Redirects back to Pending Cases
+    setActiveTab('cases'); // Keep on Cases page to prevent blank page
   };
 
   // Save changes settings
   const handleSaveSettings = (e) => {
     e.preventDefault();
-    updateProfile({ age, phone, address });
+    updateProfile({ age, phone, address, profilePhotoUrl: profilePhoto });
     alert('Changes Saved');
     setActiveTab('dashboard');
   };
@@ -108,7 +129,9 @@ export default function CounselorDashboard({
     if (e.target.files && e.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setProfilePhoto(event.target.result);
+        const photoUrl = event.target.result;
+        setProfilePhoto(photoUrl);
+        updateProfile({ profilePhotoUrl: photoUrl });
       };
       reader.readAsDataURL(e.target.files[0]);
     }
@@ -502,13 +525,6 @@ export default function CounselorDashboard({
                         >
                           Warning and Mark as Resolved
                         </button>
-                        <button 
-                          onClick={() => handleCaseAction(c.id, 'Falsely Detected')} 
-                          className="btn btn-secondary" 
-                          style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                        >
-                          Falsely Detected
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -662,96 +678,224 @@ export default function CounselorDashboard({
 
         {/* Counseling Slots Tab */}
         {activeTab === 'counselingSlots' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'start' }}>
-            {/* Left Column: Previous Sessions History */}
-            <div className="glass-panel" style={{ padding: '24px', maxHeight: '600px', overflowY: 'auto' }}>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Previous Sessions</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '16px' }}>
-                Completed/Approved counseling sessions.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {counselingSlots.filter(s => s.status === 'Approved').length === 0 ? (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
-                    No completed sessions yet.
+          <div>
+            {(() => {
+              const validCounselingSlots = (counselingSlots || []).filter(s => {
+              const r = (s.reason || '').toLowerCase().trim();
+              if (r.includes('experiencing stress regarding exam schedule')) return false;
+              if (r.includes('i wanna talk to you') || r.includes('wanna talk')) return false;
+              return true;
+            });
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px', alignItems: 'start' }}>
+                {/* Left Column: Previous Incidents / Sessions History */}
+                <div className="glass-panel" style={{ padding: '24px', maxHeight: '600px', overflowY: 'auto' }}>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Previous Incidents & Sessions</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '16px' }}>
+                    Scheduled and finished counseling records.
                   </p>
-                ) : (
-                  counselingSlots.filter(s => s.status === 'Approved').map(slot => (
-                    <div key={slot.id} style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '3px solid var(--success)' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '0.85rem', display: 'block' }}>
-                        {slot.studentName} (Roll: {slot.rollNo || 'N/A'})
-                      </span>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
-                        Reason: {slot.reason}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {validCounselingSlots.filter(s => s.status === 'Finished' || s.status === 'Approved' || (s.timings && s.timings.length > 0)).length === 0 ? (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+                        No previous incidents or sessions yet.
                       </p>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={12} />
-                        {slot.timings}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Right Column: Pending Bookings */}
-            <div className="glass-panel" style={{ padding: '32px' }}>
-              <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Counseling Slot Bookings</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
-                Review student counseling session requests, assign dates and times, and approve requests.
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {counselingSlots.filter(s => s.status === 'Pending').map(slot => {
-                  return (
-                    <div key={slot.id} className="glass-panel" style={{ padding: '20px', background: 'var(--bg-tertiary)', borderLeft: '4px solid var(--warning)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>{slot.studentName} (Roll: {slot.rollNo || 'N/A'})</span>
-                        <span className="badge badge-warning">{slot.status}</span>
-                      </div>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                        <strong>Department:</strong> {slot.dept}
-                      </p>
-                      <p style={{ fontStyle: 'italic', fontSize: '0.9rem', color: 'var(--text-primary)', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-glass)', marginBottom: '16px' }}>
-                        "{slot.reason}"
-                      </p>
-
-                      <div>
-                        <div style={{ marginBottom: '10px' }}>
-                          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>Time Slots *</label>
-                          <input 
-                            type="text" 
-                            className="form-input" 
-                            placeholder="eg. Monday, Aug 5 at 2:00 PM"
-                            value={slotTimings[slot.id] || ''}
-                            onChange={(e) => setSlotTimings({ ...slotTimings, [slot.id]: e.target.value })}
-                            style={{ maxWidth: '340px' }}
-                          />
+                    ) : (
+                      validCounselingSlots.filter(s => s.status === 'Finished' || s.status === 'Approved' || (s.timings && s.timings.length > 0)).map(slot => (
+                        <div key={slot.id} style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: slot.status === 'Finished' ? '3px solid var(--success)' : '3px solid var(--primary)' }}>
+                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', display: 'block' }}>
+                            {slot.studentName} (Roll: {slot.rollNo || 'N/A'})
+                          </span>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
+                            Reason: {slot.reason}
+                          </p>
+                          <span style={{ fontSize: '0.7rem', color: slot.status === 'Finished' ? 'var(--success)' : 'var(--primary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Clock size={12} />
+                            {slot.timings || (slot.status === 'Finished' ? 'Completed' : 'Scheduled')}
+                          </span>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                          <button 
-                            onClick={() => {
-                              approveCounselingSlot(slot.id, slotTimings[slot.id]);
-                            }}
-                            disabled={!(slotTimings[slot.id] && slotTimings[slot.id].trim())}
-                            className="btn btn-primary"
-                            style={{ padding: '6px 14px', fontSize: '0.8rem', opacity: (slotTimings[slot.id] && slotTimings[slot.id].trim()) ? 1 : 0.5, cursor: (slotTimings[slot.id] && slotTimings[slot.id].trim()) ? 'pointer' : 'not-allowed' }}
-                          >
-                            Approve
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {counselingSlots.filter(s => s.status === 'Pending').length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                    No pending counseling slots requested by students.
+                      ))
+                    )}
                   </div>
-                )}
+                </div>
+
+                {/* Right Column: Counseling Bookings */}
+                <div className="glass-panel" style={{ padding: '32px' }}>
+                  <h2 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Counseling Slot Bookings</h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '24px' }}>
+                    Review student counseling session requests, pick appointment date and time, and update status.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {validCounselingSlots.map(slot => {
+                      const currentStatus = slotStatuses[slot.id] || slot.status || 'Pending';
+                      const timePassed = isTimePassed(slot.timings);
+                      const isFinished = (slot.status === 'Finished');
+                      const isPendingAfterTime = (slot.status === 'Pending' && timePassed);
+                      const isSubmitted = submittedSlots[slot.id] || (slot.timings && !timePassed);
+
+                      return (
+                        <div 
+                          key={slot.id} 
+                          className="glass-panel" 
+                          style={{ 
+                            padding: '20px', 
+                            background: isFinished ? 'rgba(16, 185, 129, 0.06)' : isPendingAfterTime ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-tertiary)', 
+                            borderLeft: isFinished ? '5px solid var(--success)' : isPendingAfterTime ? '5px solid var(--danger)' : '5px solid var(--primary)',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>{slot.studentName} (Roll: {slot.rollNo || 'N/A'})</span>
+                            <span className={`badge ${isFinished ? 'badge-success' : isPendingAfterTime ? 'badge-danger' : 'badge-info'}`} style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
+                              {slot.status}
+                            </span>
+                          </div>
+                          
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                            <strong>Department:</strong> {slot.dept}
+                          </p>
+                          
+                          <p style={{ fontStyle: 'italic', fontSize: '0.9rem', color: 'var(--text-primary)', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-glass)', marginBottom: '16px' }}>
+                            "{slot.reason}"
+                          </p>
+
+                          {isFinished && (
+                            <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', borderRadius: '6px', color: 'var(--success)', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <CheckCircle2 size={18} />
+                              <span>Counselling ended successfully</span>
+                            </div>
+                          )}
+
+                          <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
+                              <div>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                  <Calendar size={14} style={{ color: 'var(--primary)' }} />
+                                  <span>Select Date</span>
+                                </label>
+                                <input 
+                                  type="date" 
+                                  className="form-input"
+                                  value={slotDates[slot.id] !== undefined ? slotDates[slot.id] : ''}
+                                  onChange={(e) => setSlotDates({ ...slotDates, [slot.id]: e.target.value })}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                  <Clock size={14} style={{ color: 'var(--primary)' }} />
+                                  <span>Select Time</span>
+                                </label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <input 
+                                    type="time" 
+                                    className="form-input"
+                                    value={slotTimes[slot.id] !== undefined ? slotTimes[slot.id] : ''}
+                                    onChange={(e) => setSlotTimes({ ...slotTimes, [slot.id]: e.target.value })}
+                                    style={{ flex: 1 }}
+                                  />
+                                  <span style={{ 
+                                    padding: '8px 14px', 
+                                    background: 'var(--bg-tertiary)', 
+                                    border: '1px solid var(--border-glass)', 
+                                    borderRadius: '6px', 
+                                    fontWeight: 'bold', 
+                                    fontSize: '0.85rem', 
+                                    color: 'var(--primary)' 
+                                  }}>
+                                    AM
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {!timePassed ? (
+                              <div>
+                                <button 
+                                  type="button"
+                                  disabled={isSubmitted}
+                                  onClick={() => {
+                                    const dateVal = slotDates[slot.id] || '';
+                                    const timeVal = slotTimes[slot.id] || '';
+                                    if (!dateVal || !timeVal) {
+                                      alert('Please select both date and time to allocate the slot.');
+                                      return;
+                                    }
+                                    const timingStr = `${dateVal} at ${timeVal} AM`;
+                                    updateCounselingSlot(slot.id, {
+                                      timings: timingStr,
+                                      status: slot.status || 'Pending'
+                                    });
+                                    setSubmittedSlots(prev => ({ ...prev, [slot.id]: true }));
+                                  }}
+                                  className={`btn ${isSubmitted ? 'btn-secondary' : 'btn-primary'}`}
+                                  style={{ 
+                                    padding: '8px 22px', 
+                                    fontSize: '0.85rem',
+                                    background: isSubmitted ? 'var(--success)' : undefined,
+                                    color: isSubmitted ? '#fff' : undefined,
+                                    borderColor: isSubmitted ? 'var(--success)' : undefined,
+                                    cursor: isSubmitted ? 'default' : 'pointer'
+                                  }}
+                                >
+                                  {isSubmitted ? 'Submitted' : 'Submit'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div>
+                                <div style={{ marginBottom: '16px' }}>
+                                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                    Counseling Status:
+                                  </label>
+                                  <select 
+                                    className="form-input"
+                                    value={currentStatus}
+                                    onChange={(e) => setSlotStatuses({ ...slotStatuses, [slot.id]: e.target.value })}
+                                    style={{ maxWidth: '240px' }}
+                                  >
+                                    <option value="Finished">Finished</option>
+                                    <option value="Pending">Pending</option>
+                                  </select>
+                                </div>
+
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    const dateVal = slotDates[slot.id] || '';
+                                    const timeVal = slotTimes[slot.id] || '';
+                                    let timingStr = slot.timings || '';
+                                    if (dateVal && timeVal) {
+                                      timingStr = `${dateVal} at ${timeVal} AM`;
+                                    }
+                                    updateCounselingSlot(slot.id, {
+                                      status: currentStatus,
+                                      timings: timingStr
+                                    });
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ padding: '8px 22px', fontSize: '0.85rem' }}
+                                >
+                                  Submit
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {validCounselingSlots.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                        No counseling slots requested yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            );
+          })()}
+        </div>
+      )}
       </main>
     </div>
   );

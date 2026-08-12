@@ -102,11 +102,7 @@ export default function LandingPage({ theme, toggleTheme, onNavigate }) {
             <p>Is accredited by NAAC with an A+ grade, reflecting its strong academic quality and institutional standards with the excellence.</p>
             <p>Our institution is dedicated to nurturing technical talent and preparing student leaders for future challenges.</p>
             <p>We assure each and every student and faculty member to protect from Harmful Content and Cyber-bullyuing.</p>
-            
           </div>
-          <button onClick={() => scrollTo('about')} className="btn btn-primary">
-            Learn More
-          </button>
         </div>
 
         <div className="hero-right">

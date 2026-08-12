@@ -15,6 +15,7 @@ public class Material {
     private String fileName;
     private String fileUrl;
     private LocalDate date;
+    private String dept;
 
     public Material() {
     }
@@ -26,6 +27,17 @@ public class Material {
         this.fileName = fileName;
         this.fileUrl = fileUrl;
         this.date = date;
+        this.dept = "Computer Science & Engineering";
+    }
+
+    public Material(String title, String description, String teacherName, String fileName, String fileUrl, LocalDate date, String dept) {
+        this.title = title;
+        this.description = description;
+        this.teacherName = teacherName;
+        this.fileName = fileName;
+        this.fileUrl = fileUrl;
+        this.date = date;
+        this.dept = dept;
     }
 
     // Getters and Setters
@@ -83,5 +95,13 @@ public class Material {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    public String getDept() {
+        return dept;
+    }
+
+    public void setDept(String dept) {
+        this.dept = dept;
     }
 }

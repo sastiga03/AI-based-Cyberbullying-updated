@@ -10,6 +10,7 @@ public class MaterialRequest {
     private String description;
     private String fileName;
     private String fileUrl;
+    private String dept;
 
     // Getters and Setters
     public String getTitle() {
@@ -42,5 +43,13 @@ public class MaterialRequest {
 
     public void setFileUrl(String fileUrl) {
         this.fileUrl = fileUrl;
+    }
+
+    public String getDept() {
+        return dept;
+    }
+
+    public void setDept(String dept) {
+        this.dept = dept;
     }
 }
