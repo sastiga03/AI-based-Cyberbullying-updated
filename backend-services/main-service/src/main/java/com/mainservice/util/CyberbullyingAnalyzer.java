@@ -1,12 +1,23 @@
 package com.mainservice.util;
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
 public class CyberbullyingAnalyzer {
+
+    @Value("${gemini.api.key:}")
+    private String apiKey;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestTemplate restTemplate = new RestTemplate();
 
     public static class AnalysisResult {
         private final int severityScore;
@@ -121,6 +132,76 @@ public class CyberbullyingAnalyzer {
     public AnalysisResult analyze(String text) {
         if (text == null || text.trim().isEmpty()) {
             return new AnalysisResult(0, "Safe", "Safe ------ 0% ------ Low", "Clean", false, Collections.emptyList());
+        }
+
+        // Try Gemini API if key is present
+        if (apiKey != null && !apiKey.trim().isEmpty() && !apiKey.startsWith("$") && !apiKey.contains("GEMINI_API_KEY")) {
+            try {
+                String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey.trim();
+
+                // Build request JSON body
+                Map<String, Object> reqBody = new HashMap<>();
+                
+                Map<String, Object> part = new HashMap<>();
+                part.put("text", "System Prompt: Analyze the following student text for cyberbullying or harassment. Respond ONLY with a JSON object in this format: { \"isHarmful\": true/false, \"severityScore\": 0 to 100, \"category\": \"Threat\" | \"Harassment\" | \"Insult\" | \"Exclusion\" | \"None\", \"reason\": \"Brief explanation of the decision\" }. Text: " + text);
+                
+                Map<String, Object> partContainer = new HashMap<>();
+                partContainer.put("parts", Collections.singletonList(part));
+                
+                reqBody.put("contents", Collections.singletonList(partContainer));
+                
+                Map<String, Object> generationConfig = new HashMap<>();
+                generationConfig.put("responseMimeType", "application/json");
+                reqBody.put("generationConfig", generationConfig);
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(reqBody), headers);
+                
+                ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                    JsonNode root = objectMapper.readTree(response.getBody());
+                    JsonNode textNode = root.path("candidates").path(0).path("content").path("parts").path(0).path("text");
+                    if (!textNode.isMissingNode()) {
+                        String cleanJson = textNode.asText().trim();
+                        JsonNode resJson = objectMapper.readTree(cleanJson);
+
+                        boolean isHarmful = resJson.path("isHarmful").asBoolean(false);
+                        int severityScore = resJson.path("severityScore").asInt(0);
+                        String category = resJson.path("category").asText("Clean");
+                        String reason = resJson.path("reason").asText("");
+
+                        if ("None".equalsIgnoreCase(category)) {
+                            category = "Clean";
+                        }
+
+                        boolean isBullying = isHarmful;
+                        String flagStatus = isBullying ? "Flagged" : "Safe";
+
+                        String tier;
+                        if (severityScore >= 75) {
+                            tier = "At Risk";
+                        } else if (severityScore >= 50) {
+                            tier = "High";
+                        } else if (severityScore >= 30) {
+                            tier = "Average";
+                        } else {
+                            tier = "Low";
+                        }
+
+                        String resultStr = (isBullying ? category : "Safe") + " ------ " + severityScore + "% ------ " + tier;
+                        List<String> flagged = new ArrayList<>();
+                        if (!reason.isEmpty()) {
+                            flagged.add(reason);
+                        }
+
+                        return new AnalysisResult(severityScore, flagStatus, resultStr, category, isBullying, flagged);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Gemini API call failed, falling back to rule-based: " + e.getMessage());
+            }
         }
 
         // Meta-safety ethical statement bypass (e.g. "Calling someone useless is wrong")
