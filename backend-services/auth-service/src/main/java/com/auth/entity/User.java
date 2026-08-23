@@ -27,6 +27,7 @@ public class User {
     private String address;
     private String dept;
     private String batch;
+    private String subjects;
 
     @Lob
     @Column(columnDefinition = "LONGTEXT")
@@ -45,6 +46,20 @@ public class User {
         this.address = address;
         this.dept = dept;
         this.batch = batch;
+        this.profilePhotoUrl = profilePhotoUrl;
+    }
+
+    public User(String name, String email, String password, String role, Integer age, String phone, String address, String dept, String batch, String subjects, String profilePhotoUrl) {
+        this.name = name;
+        this.email = email;
+        this.password = password;
+        this.role = role;
+        this.age = age;
+        this.phone = phone;
+        this.address = address;
+        this.dept = dept;
+        this.batch = batch;
+        this.subjects = subjects;
         this.profilePhotoUrl = profilePhotoUrl;
     }
 
@@ -127,6 +142,14 @@ public class User {
 
     public void setBatch(String batch) {
         this.batch = batch;
+    }
+
+    public String getSubjects() {
+        return subjects;
+    }
+
+    public void setSubjects(String subjects) {
+        this.subjects = subjects;
     }
 
     public String getProfilePhotoUrl() {

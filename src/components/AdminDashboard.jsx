@@ -9,6 +9,29 @@ import {
   CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell 
 } from 'recharts';
 
+const AVAILABLE_SUBJECTS = [
+  "Data Structures",
+  "Design and Analysis of Algorithms",
+  "Operating Systems",
+  "Database Management Systems",
+  "Computer Networks",
+  "Software Engineering",
+  "Object Oriented Programming",
+  "Theory of Computation",
+  "Compiler Design",
+  "Artificial Intelligence",
+  "Machine Learning",
+  "Web Technology",
+  "Cloud Computing",
+  "Cryptography and Security",
+  "Data Warehousing and Mining",
+  "Internet of Things",
+  "Cyber Forensics",
+  "Software Project Management",
+  "Mobile App Development",
+  "Big Data Analytics"
+];
+
 export default function AdminDashboard({ 
   user, 
   onLogout, 
@@ -50,6 +73,8 @@ export default function AdminDashboard({
   const [newUserRole, setNewUserRole] = useState('Student');
   const [newUserDept, setNewUserDept] = useState('Computer Science & Engineering');
   const [newUserSubject, setNewUserSubject] = useState('');
+  const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+  const [showEditSubjectDropdown, setShowEditSubjectDropdown] = useState(false);
 
   // Excel Upload states
   const [excelDragActive, setExcelDragActive] = useState(false);
@@ -88,41 +113,71 @@ export default function AdminDashboard({
 
   const photoInputRef = useRef(null);
 
-  // Statistics Data
-  const scannedCount = 48293;
-  const flagsCount = 87;
-  const accuracyPercent = 98.7;
+  // Real-time calculation of dynamic severity distribution
+  const lowCount = (cases || []).filter(c => {
+    const num = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+    return num >= 0 && num <= 30;
+  }).length;
 
-  // Department incident data
-  const deptData = [
-    { name: 'CSE', count: 18 },
-    { name: 'IT', count: 12 },
-    { name: 'AD', count: 8 },
-    { name: 'ECE', count: 15 },
-    { name: 'EE', count: 4 },
-    { name: 'ME', count: 3 }
-  ];
+  const mediumCount = (cases || []).filter(c => {
+    const num = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+    return num > 30 && num <= 60;
+  }).length;
 
-  // Severity Distribution Data
+  const highCount = (cases || []).filter(c => {
+    const num = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+    return num > 60 && num <= 80;
+  }).length;
+
+  const atRiskCount = (cases || []).filter(c => {
+    const num = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+    return num > 80;
+  }).length;
+
+  const totalSev = lowCount + mediumCount + highCount + atRiskCount;
   const severityDistData = [
-    { name: 'Low', value: 34 },
-    { name: 'Medium', value: 28 },
-    { name: 'High', value: 20 },
-    { name: 'At Risk', value: 5 }
+    { name: 'Low', value: totalSev > 0 ? Math.round((lowCount / totalSev) * 100) : 0 },
+    { name: 'Medium', value: totalSev > 0 ? Math.round((mediumCount / totalSev) * 100) : 0 },
+    { name: 'High', value: totalSev > 0 ? Math.round((highCount / totalSev) * 100) : 0 },
+    { name: 'At Risk', value: totalSev > 0 ? Math.round((atRiskCount / totalSev) * 100) : 0 }
   ];
   const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#7f1d1d'];
 
-  // Detailed severity monitoring table data (High -> Low severity)
-  const severityRecords = [
-    { name: 'Thrisha', dept: 'CIVIL', severity: 95, status: 'Pending' },
-    { name: 'Rahul', dept: 'CSE', severity: 87, status: 'Pending' },
-    { name: 'Thejan', dept: 'IT', severity: 80, status: 'Resolved' },
-    { name: 'Jaya She', dept: 'CSE', severity: 85, status: 'Pending' },
-    { name: 'Mouna', dept: 'CSE', severity: 47, status: 'Pending' },
-    { name: 'Aakil', dept: 'ECE', severity: 22, status: 'Resolved' },
-    { name: 'Asin', dept: 'IT', severity: 4, status: 'Resolved' },
-    { name: 'Sanjai', dept: 'ECE', severity: 2, status: 'Resolved' }
-  ].sort((a, b) => b.severity - a.severity); // Sorted High to Low
+  const pendingIncidentsCount = (cases || []).filter(c => (c.status || '').toLowerCase() === 'pending').length;
+
+  // Dynamic detailed severity monitoring table data (High -> Low severity)
+  const severityRecords = (() => {
+    const defaultSeed = [
+      { name: 'Thrisha', dept: 'CIVIL', severity: 95, status: 'Pending' },
+      { name: 'Rahul', dept: 'CSE', severity: 87, status: 'Pending' },
+      { name: 'Thejan', dept: 'IT', severity: 80, status: 'Resolved' },
+      { name: 'Jaya She', dept: 'CSE', severity: 85, status: 'Pending' },
+      { name: 'Mouna', dept: 'CSE', severity: 47, status: 'Pending' },
+      { name: 'Aakil', dept: 'ECE', severity: 22, status: 'Resolved' },
+      { name: 'Asin', dept: 'IT', severity: 4, status: 'Resolved' },
+      { name: 'Sanjai', dept: 'ECE', severity: 2, status: 'Resolved' }
+    ];
+
+    const mapped = (cases || []).map(c => {
+      const numSev = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+      return {
+        id: c.id,
+        name: c.studentName || 'Student',
+        dept: c.className || 'CSE',
+        severity: numSev,
+        status: c.status || 'Pending'
+      };
+    });
+
+    const combined = [...mapped];
+    defaultSeed.forEach(seed => {
+      if (!combined.some(item => item.name.toLowerCase() === seed.name.toLowerCase())) {
+        combined.push(seed);
+      }
+    });
+
+    return combined.sort((a, b) => b.severity - a.severity);
+  })();
 
   // Add user handler
   const handleAddUser = (e) => {
@@ -135,7 +190,8 @@ export default function AdminDashboard({
       role: newUserRole,
       password: newUserPassword,
       dept: newUserDept,
-      batch: newUserRole === 'Teacher' ? newUserSubject : ''
+      batch: newUserRole === 'Teacher' ? '' : '2023-2027',
+      subjects: newUserRole === 'Teacher' ? newUserSubject : ''
     });
 
     setNewUserName('');
@@ -306,29 +362,13 @@ export default function AdminDashboard({
                 </div>
                 <div>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>TOTAL INCIDENTS</span>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--danger)' }}>{cases.length}</span>
+                  <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--danger)' }}>{pendingIncidentsCount}</span>
                 </div>
               </div>
             </div>
 
             {/* Recharts Graphs below the Dashboard statistics */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
-              
-              {/* Department Incident Counts */}
-              <div className="glass-panel chart-card">
-                <h3 style={{ fontSize: '1rem', marginBottom: '16px' }}>Department-Wise Incident Statistics</h3>
-                <div style={{ width: '100%', height: 240 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={deptData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} barSize={32} name="Incident Count" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginBottom: '32px' }}>
 
               {/* Severity Distribution */}
               <div className="glass-panel chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -460,7 +500,8 @@ export default function AdminDashboard({
                     password: newUserPassword,
                     role: newUserRole,
                     dept: (newUserRole === 'Student' || newUserRole === 'Teacher') ? newUserDept : '',
-                    batch: newUserRole === 'Teacher' ? newUserSubject : ''
+                    batch: newUserRole === 'Teacher' ? '' : (newUserRole === 'Student' ? '2023-2027' : ''),
+                    subjects: newUserRole === 'Teacher' ? newUserSubject : ''
                   });
                   setNewUserName('');
                   setNewUserEmail('');
@@ -544,15 +585,59 @@ export default function AdminDashboard({
 
                 {newUserRole === 'Teacher' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subject</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="e.g. Data Structures" 
-                      value={newUserSubject}
-                      onChange={(e) => setNewUserSubject(e.target.value)}
-                      required
-                    />
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subjects Handled</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Click to select subjects..." 
+                        value={newUserSubject}
+                        readOnly
+                        onClick={() => setShowSubjectDropdown(!showSubjectDropdown)}
+                        style={{ cursor: 'pointer' }}
+                        required
+                      />
+                      {showSubjectDropdown && (
+                        <div style={{ 
+                          position: 'absolute', 
+                          bottom: '100%', 
+                          left: '0', 
+                          right: '0', 
+                          zIndex: '100', 
+                          background: 'var(--bg-tertiary)', 
+                          border: '1px solid var(--border-color)', 
+                          borderRadius: '6px', 
+                          boxShadow: '0 -8px 16px rgba(0,0,0,0.3)', 
+                          maxHeight: '200px', 
+                          overflowY: 'auto', 
+                          padding: '12px',
+                          marginBottom: '8px'
+                        }}>
+                          {AVAILABLE_SUBJECTS.map(subName => {
+                            const selectedList = newUserSubject ? newUserSubject.split(', ').map(s => s.trim()) : [];
+                            const isSelected = selectedList.includes(subName);
+                            return (
+                              <label key={subName} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected} 
+                                  onChange={() => {
+                                    let updated;
+                                    if (isSelected) {
+                                      updated = selectedList.filter(s => s !== subName);
+                                    } else {
+                                      updated = [...selectedList, subName];
+                                    }
+                                    setNewUserSubject(updated.join(', '));
+                                  }}
+                                />
+                                {subName}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -620,7 +705,7 @@ export default function AdminDashboard({
                                   setEditPassword(u.password || 'password123');
                                   setEditRole(u.role);
                                   setEditDept(u.dept || '');
-                                  setEditSubject(u.batch || '');
+                                  setEditSubject(u.subjects || u.batch || '');
                                 }} 
                                 className="btn btn-secondary" 
                                 style={{ padding: '4px 8px', fontSize: '0.75rem' }}
@@ -657,7 +742,8 @@ export default function AdminDashboard({
                       password: editPassword,
                       role: editRole,
                       dept: (editRole === 'Student' || editRole === 'Teacher') ? editDept : '',
-                      batch: editRole === 'Teacher' ? editSubject : ''
+                      batch: editRole === 'Teacher' ? '' : (editingUser.batch || ''),
+                      subjects: editRole === 'Teacher' ? editSubject : ''
                     });
                     setEditingUser(null);
                     setEditSuccessModal(true);
@@ -697,8 +783,59 @@ export default function AdminDashboard({
                     )}
                     {editRole === 'Teacher' && (
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subject</label>
-                        <input type="text" className="form-input" value={editSubject} onChange={(e) => setEditSubject(e.target.value)} required />
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>Subjects Handled</label>
+                        <div style={{ position: 'relative' }}>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            placeholder="Click to select subjects..." 
+                            value={editSubject}
+                            readOnly
+                            onClick={() => setShowEditSubjectDropdown(!showEditSubjectDropdown)}
+                            style={{ cursor: 'pointer' }}
+                            required
+                          />
+                          {showEditSubjectDropdown && (
+                            <div style={{ 
+                              position: 'absolute', 
+                              bottom: '100%', 
+                              left: '0', 
+                              right: '0', 
+                              zIndex: '100', 
+                              background: 'var(--bg-tertiary)', 
+                              border: '1px solid var(--border-color)', 
+                              borderRadius: '6px', 
+                              boxShadow: '0 -8px 16px rgba(0,0,0,0.3)', 
+                              maxHeight: '200px', 
+                              overflowY: 'auto', 
+                              padding: '12px',
+                              marginBottom: '8px'
+                            }}>
+                              {AVAILABLE_SUBJECTS.map(subName => {
+                                const selectedList = editSubject ? editSubject.split(', ').map(s => s.trim()) : [];
+                                const isSelected = selectedList.includes(subName);
+                                return (
+                                  <label key={subName} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                                    <input 
+                                      type="checkbox" 
+                                      checked={isSelected} 
+                                      onChange={() => {
+                                        let updated;
+                                        if (isSelected) {
+                                          updated = selectedList.filter(s => s !== subName);
+                                        } else {
+                                          updated = [...selectedList, subName];
+                                        }
+                                        setEditSubject(updated.join(', '));
+                                      }}
+                                    />
+                                    {subName}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -717,29 +854,7 @@ export default function AdminDashboard({
         {activeTab === 'aiMonitoring' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* AI Diagnostics row */}
-            <div className="dashboard-grid" style={{ marginBottom: 0 }}>
-              <div className="glass-panel stat-card">
-                <div>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Content Scanned</span>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '800' }}>{scannedCount.toLocaleString()}</span>
-                </div>
-              </div>
 
-              <div className="glass-panel stat-card">
-                <div>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Flags Generated</span>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--danger)' }}>{flagsCount}</span>
-                </div>
-              </div>
-
-              <div className="glass-panel stat-card">
-                <div>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>Detection Accuracy</span>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--success)' }}>{accuracyPercent}%</span>
-                </div>
-              </div>
-            </div>
 
             {/* Severity Monitoring Table (Replaces System Status) */}
             <div className="glass-panel" style={{ padding: '32px' }}>

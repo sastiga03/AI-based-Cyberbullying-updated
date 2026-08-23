@@ -6,6 +6,7 @@ import {
   Sun, Moon, Plus, Bell, FileDown
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { analyzeCyberbullying } from '../utils/aiDetector';
 
 export default function TeacherDashboard({ 
   user, 
@@ -32,6 +33,8 @@ export default function TeacherDashboard({
   users = []
 }) {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('teacher_active_tab') || 'dashboard');
+
+  const teacherSubjects = user.subjects ? user.subjects.split(', ').map(s => s.trim()) : (user.batch ? [user.batch] : []);
 
   const defaultDepts = [
     'Computer Science & Engineering',
@@ -64,9 +67,26 @@ export default function TeacherDashboard({
     return n1 === n2 || n1.includes(n2) || n2.includes(n1);
   };
 
-  const filteredMessages = (messages || []).filter(msg => 
-    !msg.teacherName || isNameMatch(msg.teacherName, user.name)
-  );
+  const isDeptMatch = (dept1, dept2) => {
+    const d1 = (dept1 || '').trim().toLowerCase();
+    const d2 = (dept2 || '').trim().toLowerCase();
+    if (!d1 || !d2) return false;
+    return d1 === d2 || d1.includes(d2) || d2.includes(d1);
+  };
+
+  const filteredMessages = (messages || []).filter(msg => {
+    const nameMatch = !msg.teacherName || isNameMatch(msg.teacherName, user.name);
+    if (!nameMatch) return false;
+
+    const student = (users || []).find(u => 
+      (u.name || '').trim().toLowerCase() === (msg.studentName || '').trim().toLowerCase()
+    );
+
+    if (student && user.dept) {
+      return isDeptMatch(student.dept, user.dept);
+    }
+    return true;
+  });
 
   const teacherUnreadMessagesCount = filteredMessages.filter(msg => !forwardedMessages.includes(msg.id)).length;
 
@@ -83,9 +103,12 @@ export default function TeacherDashboard({
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
-  const [newTaskClass, setNewTaskClass] = useState('CSE A');
+  const [newTaskClass, setNewTaskClass] = useState('Computer Science & Engineering');
+  const [selectedDepts, setSelectedDepts] = useState(['Computer Science & Engineering']);
+  const [showDeptDropdown, setShowDeptDropdown] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [newTaskSubject, setNewTaskSubject] = useState('');
 
   // Switch Class state
   const [selectedClass, setSelectedClass] = useState('III Year Computer Science');
@@ -101,9 +124,14 @@ export default function TeacherDashboard({
   const [materialsView, setMaterialsView] = useState('list'); // 'list' or 'create'
   const [newMaterialTitle, setNewMaterialTitle] = useState('');
   const [newMaterialDesc, setNewMaterialDesc] = useState('');
-  const [newMaterialDept, setNewMaterialDept] = useState(user.dept || 'Computer Science & Engineering');
+  const [newMaterialDept, setNewMaterialDept] = useState(
+    (user.dept === 'Computer Science & Engineering' || user.dept === 'Information & Technology') 
+      ? user.dept 
+      : 'Computer Science & Engineering'
+  );
   const [newMaterialFile, setNewMaterialFile] = useState(null);
   const [newMaterialDragActive, setNewMaterialDragActive] = useState(false);
+  const [newMaterialSubject, setNewMaterialSubject] = useState('');
   const materialFileInputRef = useRef(null);
 
   // Announcements scrolling ref
@@ -169,12 +197,28 @@ export default function TeacherDashboard({
   const [showCreateHiddenTaskModal, setShowCreateHiddenTaskModal] = useState(false);
   const [hiddenTaskTitle, setHiddenTaskTitle] = useState('');
   const [hiddenTaskFile, setHiddenTaskFile] = useState(null);
+  const [hiddenTaskDueDate, setHiddenTaskDueDate] = useState('');
+  const [hiddenTaskDepts, setHiddenTaskDepts] = useState(['Computer Science & Engineering']);
+  const [showHiddenDeptDropdown, setShowHiddenDeptDropdown] = useState(false);
   const [isCreatingHiddenTask, setIsCreatingHiddenTask] = useState(false);
+  const [hiddenTaskSubject, setHiddenTaskSubject] = useState('');
 
   const handleCreateHiddenTask = async (e) => {
     e.preventDefault();
     if (!hiddenTaskTitle.trim()) {
       alert("Please enter a task title.");
+      return;
+    }
+    if (!hiddenTaskDueDate) {
+      alert("Please select a due date.");
+      return;
+    }
+    if (hiddenTaskDepts.length === 0) {
+      alert("Please select at least one department.");
+      return;
+    }
+    if (!hiddenTaskSubject) {
+      alert("Please select a subject.");
       return;
     }
     if (!hiddenTaskFile) {
@@ -196,8 +240,9 @@ export default function TeacherDashboard({
       await createNewTask({
         title: hiddenTaskTitle,
         desc: 'Hidden Reference Task',
-        dueDate: '',
-        targetClass: 'CSE A',
+        dueDate: hiddenTaskDueDate,
+        targetClass: hiddenTaskDepts.join(', '),
+        subject: hiddenTaskSubject,
         fileName: hiddenTaskFile.name,
         fileUrl: fileUrl,
         visible: false
@@ -205,7 +250,11 @@ export default function TeacherDashboard({
 
       setShowCreateHiddenTaskModal(false);
       setHiddenTaskTitle('');
+      setHiddenTaskDueDate('');
+      setHiddenTaskDepts(['Computer Science & Engineering']);
+      setHiddenTaskSubject('');
       setHiddenTaskFile(null);
+      setShowHiddenDeptDropdown(false);
       setHiddenTaskCreatedModal(true);
     } catch (err) {
       console.error(err);
@@ -234,23 +283,35 @@ export default function TeacherDashboard({
   const fileInputRef = useRef(null);
   const photoInputRef = useRef(null);
 
+  const uniqueDepartments = Array.from(new Set([
+    "Information & Technology",
+    "Computer Science & Engineering",
+    "Electronics & Communication Engineering",
+    "Artificial Intelligence & Data Science",
+    ...((users || [])
+      .map(u => u.dept)
+      .filter(Boolean)
+      .map(d => d.trim()))
+  ]));
+
   const emailPrefix = (user.email || '').split('@')[0].toLowerCase();
   const myTasks = tasks.filter(t => (t.instructor || '').trim().toLowerCase() === emailPrefix);
   const myHiddenTasks = hiddenTasks.filter(t => (t.instructor || '').trim().toLowerCase() === emailPrefix);
 
-  const myTasksTitles = myTasks.map(t => t.title.toLowerCase());
+  const myTasksTitles = [
+    ...myTasks.map(t => t.title.toLowerCase()),
+    ...myHiddenTasks.map(t => t.title.toLowerCase())
+  ];
   const mySubmissions = submissions.filter(s => myTasksTitles.includes((s.taskTitle || '').toLowerCase()));
 
   // 1. Chart Data
   // Submission Analytics
   const totalTasksCount = myTasks.length + myHiddenTasks.length;
   const totalSubsCount = mySubmissions.length;
-  const flaggedCount = mySubmissions.filter(s => s.flagStatus === 'Flagged').length;
 
   const submissionAnalyticsData = [
     { name: 'Total Tasks', count: totalTasksCount },
-    { name: 'Total Submissions', count: totalSubsCount },
-    { name: 'Flagged Content', count: flaggedCount }
+    { name: 'Total Submissions', count: totalSubsCount }
   ];
 
   // Class Task Completion
@@ -290,8 +351,8 @@ export default function TeacherDashboard({
   // Submit Create Task
   const handleCreateTask = (e) => {
     e.preventDefault();
-    if (!newTaskTitle || !newTaskDueDate) {
-      alert('Please fill out Title and Due Date.');
+    if (!newTaskTitle || !newTaskDueDate || !newTaskSubject) {
+      alert('Please fill out Title, Due Date, and Subject.');
       return;
     }
 
@@ -300,6 +361,7 @@ export default function TeacherDashboard({
       desc: newTaskDesc,
       dueDate: newTaskDueDate,
       targetClass: newTaskClass,
+      subject: newTaskSubject,
       fileName: uploadedFile ? uploadedFile.name : ''
     });
 
@@ -446,9 +508,13 @@ export default function TeacherDashboard({
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
               <span>Tutor</span>
               <span style={{ color: 'var(--text-muted)' }}>•</span>
-              <span style={{ fontWeight: '600' }}>III Year Computer Science</span>
-              <span style={{ color: 'var(--text-muted)' }}>•</span>
-              <span>Gen AI (Subject Handling Staff)</span>
+              <span style={{ fontWeight: '600' }}>{user.dept || 'Computer Science & Engineering'}</span>
+              {(user.subjects || user.batch) && (
+                <>
+                  <span style={{ color: 'var(--text-muted)' }}>•</span>
+                  <span style={{ fontWeight: '600', color: 'var(--accent)' }}>Handling: {user.subjects || user.batch}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -468,8 +534,27 @@ export default function TeacherDashboard({
               onClick={() => setActiveTab('messages')} 
               className="icon-badge-btn" 
               title="Student Messages"
+              style={{ position: 'relative' }}
             >
               <MessageSquare size={20} />
+              {teacherUnreadMessagesCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  background: 'var(--danger)',
+                  color: 'white',
+                  borderRadius: '50%',
+                  padding: '2px 6px',
+                  fontSize: '0.65rem',
+                  fontWeight: 'bold',
+                  lineHeight: '1',
+                  minWidth: '16px',
+                  textAlign: 'center'
+                }}>
+                  {teacherUnreadMessagesCount}
+                </span>
+              )}
             </button>
 
             <div className="user-menu-trigger">
@@ -523,7 +608,7 @@ export default function TeacherDashboard({
             </div>
 
             {/* Graphs Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginBottom: '32px' }}>
               
               {/* Submission Analytics Graph */}
               <div className="glass-panel chart-card">
@@ -540,23 +625,6 @@ export default function TeacherDashboard({
                   </ResponsiveContainer>
                 </div>
               </div>
-
-              {/* Class Task Completion Graph */}
-              <div className="glass-panel chart-card">
-                <h3 style={{ fontSize: '1rem', marginBottom: '16px' }}>Class Task Completion (%)</h3>
-                <div style={{ width: '100%', height: 240 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={classCompletionData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" />
-                      <YAxis domain={[0, 100]} />
-                      <Tooltip />
-                      <Bar dataKey="completionRate" fill="var(--accent)" radius={[4, 4, 0, 0]} barSize={40} name="Completion Rate (%)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
             </div>
 
             {/* Hidden Task Management (Replaces Recent Student Submissions) */}
@@ -580,6 +648,7 @@ export default function TeacherDashboard({
                   <thead>
                     <tr>
                       <th>Task Title</th>
+                      <th>Subject</th>
                       <th>Reference File</th>
                       <th>Visible to Students</th>
                       <th>Action</th>
@@ -592,6 +661,11 @@ export default function TeacherDashboard({
                       return (
                         <tr key={task.id}>
                           <td style={{ fontWeight: '600' }}>{task.title}</td>
+                          <td>
+                            <span className="badge badge-info" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
+                              {task.subject || 'General'}
+                            </span>
+                          </td>
                           <td>
                             <span 
                               onClick={() => {
@@ -635,7 +709,7 @@ export default function TeacherDashboard({
                     })}
                     {myHiddenTasks.length === 0 && (
                       <tr>
-                        <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
                           No hidden tasks.
                         </td>
                       </tr>
@@ -794,17 +868,75 @@ Deadline: Refer to dashboard instructions.`}
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                     Class Selection
                   </label>
-                  <select 
-                    className="form-input"
-                    value={newTaskClass}
-                    onChange={(e) => setNewTaskClass(e.target.value)}
-                  >
-                    <option value="CSE A">CSE A</option>
-                    <option value="IYB">IYB</option>
-                    <option value="AD C">AD C</option>
-                    <option value="ECE C">ECE C</option>
-                  </select>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Click to select departments..." 
+                      value={newTaskClass}
+                      readOnly
+                      onClick={() => setShowDeptDropdown(!showDeptDropdown)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {showDeptDropdown && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        bottom: '100%', 
+                        left: '0', 
+                        right: '0', 
+                        zIndex: '100', 
+                        background: 'var(--bg-tertiary)', 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: '6px', 
+                        boxShadow: '0 -8px 16px rgba(0,0,0,0.3)', 
+                        maxHeight: '200px', 
+                        overflowY: 'auto', 
+                        padding: '12px',
+                        marginBottom: '8px'
+                      }}>
+                        {uniqueDepartments.map(deptName => {
+                          const isSelected = selectedDepts.includes(deptName);
+                          return (
+                            <label key={deptName} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onChange={() => {
+                                  let updated;
+                                  if (isSelected) {
+                                    updated = selectedDepts.filter(d => d !== deptName);
+                                  } else {
+                                    updated = [...selectedDepts, deptName];
+                                  }
+                                  setSelectedDepts(updated);
+                                  setNewTaskClass(updated.join(', '));
+                                }}
+                              />
+                              {deptName}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  Choose Subject *
+                </label>
+                <select 
+                  className="form-input" 
+                  value={newTaskSubject} 
+                  onChange={(e) => setNewTaskSubject(e.target.value)}
+                  required
+                >
+                  <option value="">-- Select Subject --</option>
+                  {teacherSubjects.map((sub, i) => (
+                    <option key={i} value={sub}>{sub}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Drag and Drop Reference File */}
@@ -952,6 +1084,7 @@ Deadline: Refer to dashboard instructions.`}
                     <thead>
                       <tr>
                         <th>Task Title</th>
+                        <th>Subject</th>
                         <th>Assigned Instructor</th>
                         <th>Submission Count</th>
                         <th>Action</th>
@@ -964,6 +1097,11 @@ Deadline: Refer to dashboard instructions.`}
                         return (
                           <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedSubmissionTask(t.title)}>
                             <td style={{ fontWeight: '600' }}>{t.title}</td>
+                            <td>
+                              <span className="badge badge-info" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
+                                {t.subject || 'General'}
+                              </span>
+                            </td>
                             <td>{instructorName}</td>
                             <td>
                               <span className="badge badge-info">{count} submissions</span>
@@ -978,7 +1116,7 @@ Deadline: Refer to dashboard instructions.`}
                       })}
                       {myTasks.length === 0 && (
                         <tr>
-                          <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                          <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
                             No active tasks posted by you.
                           </td>
                         </tr>
@@ -1000,46 +1138,65 @@ Deadline: Refer to dashboard instructions.`}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {filteredMessages.map(msg => (
-                <div key={msg.id} className="glass-panel" style={{ padding: '20px', background: 'var(--bg-tertiary)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div className="user-avatar-circle" style={{ background: 'var(--accent)' }}>
-                        {msg.studentName.split(' ').map(n => n[0]).join('')}
+              {filteredMessages.map(msg => {
+                const aiAnalysis = analyzeCyberbullying(msg.content);
+                const isHighRisk = aiAnalysis.isBullying;
+
+                return (
+                  <div 
+                    key={msg.id} 
+                    className="glass-panel" 
+                    style={{ 
+                      padding: '20px', 
+                      background: 'var(--bg-tertiary)',
+                      borderLeft: isHighRisk ? '4px solid var(--danger)' : '4px solid var(--primary)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className="user-avatar-circle" style={{ background: 'var(--accent)' }}>
+                          {msg.studentName.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div>
+                          <h4 style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{msg.studentName}</h4>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subject: {msg.subject}</span>
+                        </div>
                       </div>
-                      <div>
-                        <h4 style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{msg.studentName}</h4>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subject: {msg.subject}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className={`badge ${isHighRisk ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldAlert size={12} />
+                          {isHighRisk ? `AI Risk: ${aiAnalysis.category} (${aiAnalysis.severityScore}%)` : 'AI Risk: Safe'}
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{msg.date}</span>
                       </div>
                     </div>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{msg.date}</span>
-                  </div>
 
-                  <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', lineHeight: '1.5', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-glass)', marginBottom: '16px' }}>
-                    "{msg.content}"
-                  </p>
+                    <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', lineHeight: '1.5', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-glass)', marginBottom: '16px' }}>
+                      "{msg.content}"
+                    </p>
 
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    {forwardedMessages.includes(msg.id) ? (
-                      <button 
-                        disabled
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'not-allowed', opacity: 0.6 }}
-                      >
-                        Forwarded
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={() => handleForwardMessage(msg)}
-                        className="btn btn-primary" 
-                        style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#fff', background: 'var(--danger)', borderColor: 'var(--danger)' }}
-                      >
-                        Forward to Counselor
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      {forwardedMessages.includes(msg.id) ? (
+                        <button 
+                          disabled
+                          className="btn btn-secondary" 
+                          style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'not-allowed', opacity: 0.6 }}
+                        >
+                          Forwarded
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleForwardMessage(msg)}
+                          className="btn btn-primary" 
+                          style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#fff', background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                        >
+                          Forward to Counselor
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {filteredMessages.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   No messages received.
@@ -1174,6 +1331,7 @@ Deadline: Refer to dashboard instructions.`}
                     <thead>
                       <tr>
                         <th>Material Title</th>
+                        <th>Subject</th>
                         <th>Description</th>
                         <th>Reference File</th>
                         <th>Upload Date</th>
@@ -1181,10 +1339,15 @@ Deadline: Refer to dashboard instructions.`}
                     </thead>
                     <tbody>
                       {materials
-                        .filter(m => m.teacherName === user.name || m.teacherName === 'AnandKumar')
+                        .filter(m => isNameMatch(m.teacherName, user.name))
                         .map(mat => (
                           <tr key={mat.id}>
                             <td style={{ fontWeight: '600' }}>{mat.title}</td>
+                            <td>
+                              <span className="badge badge-info" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
+                                {mat.subject || 'General'}
+                              </span>
+                            </td>
                             <td style={{ color: 'var(--text-secondary)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mat.description}</td>
                             <td>
                               <span 
@@ -1208,8 +1371,8 @@ Deadline: Refer to dashboard instructions.`}
 
                 <form onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!newMaterialTitle) {
-                    alert('Please enter a title');
+                  if (!newMaterialTitle || !newMaterialSubject) {
+                    alert('Please enter a title and select a subject');
                     return;
                   }
 
@@ -1252,7 +1415,8 @@ Deadline: Refer to dashboard instructions.`}
                     teacherName: user.name || 'Prof. Anand Kumar',
                     fileName: newMaterialFile ? newMaterialFile.name : 'academic_reference.pdf',
                     fileUrl: uploadedUrl || base64Fallback,
-                    dept: newMaterialDept
+                    dept: newMaterialDept,
+                    subject: newMaterialSubject
                   });
                   setMaterialUploadedModal(true);
                 }}>
@@ -1278,8 +1442,25 @@ Deadline: Refer to dashboard instructions.`}
                       onChange={(e) => setNewMaterialDept(e.target.value)}
                       required
                     >
-                      {availableDepartments.map((d, i) => (
+                      {["Computer Science & Engineering", "Information & Technology"].map((d, i) => (
                         <option key={i} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                      Choose Subject *
+                    </label>
+                    <select 
+                      className="form-input" 
+                      value={newMaterialSubject} 
+                      onChange={(e) => setNewMaterialSubject(e.target.value)}
+                      required
+                    >
+                      <option value="">-- Select Subject --</option>
+                      {teacherSubjects.map((sub, i) => (
+                        <option key={i} value={sub}>{sub}</option>
                       ))}
                     </select>
                   </div>
@@ -1380,6 +1561,83 @@ Deadline: Refer to dashboard instructions.`}
                     placeholder="Enter task title"
                   />
                 </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Due Date *</label>
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={hiddenTaskDueDate} 
+                    onChange={(e) => setHiddenTaskDueDate(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Choose Department *</label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="Click to select departments..." 
+                      value={hiddenTaskDepts.join(', ')}
+                      readOnly
+                      onClick={() => setShowHiddenDeptDropdown(!showHiddenDeptDropdown)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {showHiddenDeptDropdown && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        bottom: '100%', 
+                        left: '0', 
+                        right: '0', 
+                        zIndex: '100', 
+                        background: 'var(--bg-tertiary)', 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: '6px', 
+                        boxShadow: '0 -8px 16px rgba(0,0,0,0.3)', 
+                        maxHeight: '200px', 
+                        overflowY: 'auto', 
+                        padding: '12px',
+                        marginBottom: '8px'
+                      }}>
+                        {["Computer Science & Engineering", "Information & Technology"].map(deptName => {
+                          const isSelected = hiddenTaskDepts.includes(deptName);
+                          return (
+                            <label key={deptName} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onChange={() => {
+                                  let updated;
+                                  if (isSelected) {
+                                    updated = hiddenTaskDepts.filter(d => d !== deptName);
+                                  } else {
+                                    updated = [...hiddenTaskDepts, deptName];
+                                  }
+                                  setHiddenTaskDepts(updated);
+                                }}
+                              />
+                              {deptName}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Choose Subject *</label>
+                  <select 
+                    className="form-input" 
+                    value={hiddenTaskSubject} 
+                    onChange={(e) => setHiddenTaskSubject(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Select Subject --</option>
+                    {teacherSubjects.map((sub, i) => (
+                      <option key={i} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
                 <div style={{ marginBottom: '24px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Upload Reference File (PDF only) *</label>
                   <input 
@@ -1406,7 +1664,11 @@ Deadline: Refer to dashboard instructions.`}
                     onClick={() => {
                       setShowCreateHiddenTaskModal(false);
                       setHiddenTaskTitle('');
+                      setHiddenTaskDueDate('');
+                      setHiddenTaskDepts(['Computer Science & Engineering']);
+                      setHiddenTaskSubject('');
                       setHiddenTaskFile(null);
+                      setShowHiddenDeptDropdown(false);
                     }} 
                     className="btn btn-secondary"
                     disabled={isCreatingHiddenTask}
@@ -1441,7 +1703,11 @@ Deadline: Refer to dashboard instructions.`}
                 setNewTaskTitle('');
                 setNewTaskDesc('');
                 setNewTaskDueDate('');
+                setSelectedDepts(['Computer Science & Engineering']);
+                setNewTaskClass('Computer Science & Engineering');
+                setShowDeptDropdown(false);
                 setUploadedFile(null);
+                setNewTaskSubject('');
                 setActiveTab('createTask');
               }}
               className="btn btn-primary"
@@ -1489,6 +1755,7 @@ Deadline: Refer to dashboard instructions.`}
                 setNewMaterialTitle('');
                 setNewMaterialDesc('');
                 setNewMaterialFile(null);
+                setNewMaterialSubject('');
                 setMaterialsView('list');
                 setActiveTab('materials');
               }}

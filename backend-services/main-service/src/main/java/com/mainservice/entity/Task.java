@@ -16,6 +16,8 @@ public class Task {
     private boolean visible;
     private String fileUrl;
     private String fileName;
+    private String targetClass;
+    private String subject;
 
     public Task() {
     }
@@ -93,5 +95,21 @@ public class Task {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getTargetClass() {
+        return targetClass;
+    }
+
+    public void setTargetClass(String targetClass) {
+        this.targetClass = targetClass;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
     }
 }

@@ -17,6 +17,7 @@ import {
   INITIAL_CHATS, 
   INITIAL_USERS 
 } from './mockData';
+import { analyzeCyberbullying } from './utils/aiDetector';
 
 function App() {
   // Theme state
@@ -42,8 +43,31 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [hiddenTasks, setHiddenTasks] = useState([]);
   const [submissions, setSubmissions] = useState([]);
-  const [cases, setCases] = useState([]);
-  const [chats, setChats] = useState({});
+  const [cases, setCases] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cached_cases');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.filter(c => {
+          if (!c || !c.content) return true;
+          const lower = c.content.toLowerCase();
+          if (lower.includes('not ugly') || lower.includes("don't worry") || lower.includes('dont worry')) {
+            const analysis = analyzeCyberbullying(c.content);
+            return analysis.isBullying;
+          }
+          return true;
+        });
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [chats, setChats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cached_chats');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+  });
   const [users, setUsers] = useState([]);
 
   // Shared materials state
@@ -167,7 +191,30 @@ function App() {
       const res = await fetch('http://localhost:8082/api/cases', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) setCases(await res.json());
+      if (res.ok) {
+        const backendCases = await res.json();
+        const cached = JSON.parse(localStorage.getItem('cached_cases') || '[]');
+        const merged = [...backendCases];
+        cached.forEach(cCase => {
+          const idx = merged.findIndex(c => String(c.id) === String(cCase.id));
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], ...cCase };
+          } else {
+            merged.unshift(cCase);
+          }
+        });
+        const cleanCases = merged.filter(c => {
+          if (!c || !c.content) return true;
+          const lower = c.content.toLowerCase();
+          if (lower.includes('not ugly') || lower.includes("don't worry") || lower.includes('dont worry')) {
+            const analysis = analyzeCyberbullying(c.content);
+            return analysis.isBullying;
+          }
+          return true;
+        });
+        localStorage.setItem('cached_cases', JSON.stringify(cleanCases));
+        setCases(cleanCases);
+      }
     } catch (e) { console.error("Error loading cases:", e); }
 
     // 5. Fetch chats
@@ -206,19 +253,14 @@ function App() {
       });
       if (res.ok) {
         const backendSlots = await res.json();
-        const cached = JSON.parse(localStorage.getItem('cached_counseling_slots') || '[]');
-        const merged = [...backendSlots];
-        cached.forEach(cSlot => {
-          const idx = merged.findIndex(s => String(s.id) === String(cSlot.id));
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], ...cSlot };
-          } else {
-            merged.push(cSlot);
-          }
-        });
-        setCounselingSlots(merged);
+        localStorage.setItem('cached_counseling_slots', JSON.stringify(backendSlots));
+        setCounselingSlots(backendSlots);
       }
-    } catch (e) { console.error("Error loading slots:", e); }
+    } catch (e) { 
+      console.error("Error loading slots:", e);
+      const cached = JSON.parse(localStorage.getItem('cached_counseling_slots') || '[]');
+      setCounselingSlots(cached);
+    }
 
     // 9. Fetch student messages (Teacher inbox)
     try {
@@ -302,7 +344,20 @@ function App() {
     localStorage.setItem('currentPage', targetPage);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        await fetch('http://localhost:8081/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (e) {
+        console.error("Logout request failed, proceeding to clear local session", e);
+      }
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('currentPage');
@@ -334,6 +389,47 @@ function App() {
 
   // 2. Student submits a task
   const submitTask = async ({ taskTitle, fileName, fileUrl, comment }) => {
+    if (comment) {
+      const analysis = analyzeCyberbullying(comment);
+      if (analysis.isBullying) {
+        const newCase = {
+          id: Date.now().toString(),
+          studentName: currentUser?.name || 'Harshini Sasti',
+          className: currentUser?.dept ? `${currentUser.dept} A` : 'CSE A',
+          severity: `${analysis.severityScore}%`,
+          date: new Date().toISOString().split('T')[0],
+          content: `Task Submission (${taskTitle}): ${comment}`,
+          status: 'Pending',
+          decision: '',
+          result: analysis.result
+        };
+        setCases(prev => [newCase, ...(prev || [])]);
+        try {
+          const cached = JSON.parse(localStorage.getItem('cached_cases') || '[]');
+          localStorage.setItem('cached_cases', JSON.stringify([newCase, ...cached]));
+        } catch (e) {}
+
+        try {
+          const token = localStorage.getItem('token');
+          const res = await fetch('http://localhost:8082/api/ai/scan-submission', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentName: currentUser?.name || 'Harshini Sasti', comment: comment, className: 'CSE A' })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.caseCreated && data.caseId) {
+              const dbId = String(data.caseId);
+              setCases(prev => (prev || []).map(c => String(c.id) === String(newCase.id) ? { ...c, id: dbId } : c));
+              const cached = JSON.parse(localStorage.getItem('cached_cases') || '[]');
+              const updatedCached = cached.map(c => String(c.id) === String(newCase.id) ? { ...c, id: dbId } : c);
+              localStorage.setItem('cached_cases', JSON.stringify(updatedCached));
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
     const token = localStorage.getItem('token');
     try {
       await fetch('http://localhost:8082/api/submissions', {
@@ -361,7 +457,7 @@ function App() {
   };
 
   // 4. Teacher creates a new task
-  const createNewTask = async ({ title, desc, dueDate, targetClass, fileName, fileUrl, visible = true }) => {
+  const createNewTask = async ({ title, desc, dueDate, targetClass, subject, fileName, fileUrl, visible = true }) => {
     const token = localStorage.getItem('token');
     try {
       await fetch('http://localhost:8082/api/tasks', {
@@ -370,7 +466,7 @@ function App() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ title, desc, dueDate, targetClass, fileName, fileUrl, visible })
+        body: JSON.stringify({ title, desc, dueDate, targetClass, subject, fileName, fileUrl, visible })
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -423,6 +519,15 @@ function App() {
 
   // 7. Counselor resolves a case
   const resolveCase = async (caseId, decisionText) => {
+    setCases(prev => (prev || []).map(c => 
+      String(c.id) === String(caseId) ? { ...c, status: 'Resolved', decision: decisionText || 'Resolved' } : c
+    ));
+    try {
+      const cached = JSON.parse(localStorage.getItem('cached_cases') || '[]');
+      const updated = cached.map(c => String(c.id) === String(caseId) ? { ...c, status: 'Resolved', decision: decisionText || 'Resolved' } : c);
+      localStorage.setItem('cached_cases', JSON.stringify(updated));
+    } catch (e) {}
+
     const token = localStorage.getItem('token');
     try {
       await fetch(`http://localhost:8082/api/cases/${caseId}/resolve`, {
@@ -437,8 +542,76 @@ function App() {
     } catch (e) { console.error(e); }
   };
 
-  // 8. Add chat message
+  // 8. Add chat message (with CyberGuard-NLP AI scanning)
   const addChatMessage = async (contactName, messageObj) => {
+    const text = messageObj?.text || '';
+    
+    // Immediately update local chats state
+    setChats(prev => {
+      const updated = {
+        ...prev,
+        [contactName]: [...(prev[contactName] || []), { ...messageObj, isFlagged: false }]
+      };
+      try {
+        localStorage.setItem('cached_chats', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    if (text) {
+      const analysis = analyzeCyberbullying(text);
+      if (analysis.isBullying) {
+        const newCase = {
+          id: Date.now().toString(),
+          studentName: messageObj.sender || currentUser?.name || 'Harshini Sasti',
+          className: currentUser?.dept ? `${currentUser.dept} A` : 'CSE A',
+          severity: `${analysis.severityScore}%`,
+          date: new Date().toISOString().split('T')[0],
+          content: text,
+          status: 'Pending',
+          decision: '',
+          result: analysis.result
+        };
+        setCases(prev => [newCase, ...(prev || [])]);
+        try {
+          const cached = JSON.parse(localStorage.getItem('cached_cases') || '[]');
+          localStorage.setItem('cached_cases', JSON.stringify([newCase, ...cached]));
+        } catch (e) {}
+
+        // Immediately update chat flagged styling locally
+        setChats(prev => {
+          const chatList = prev[contactName] || [];
+          const updatedList = chatList.map((m, i) => 
+            i === chatList.length - 1 ? { ...m, isFlagged: true } : m
+          );
+          const updated = { ...prev, [contactName]: updatedList };
+          try {
+            localStorage.setItem('cached_chats', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
+
+        try {
+          const token = localStorage.getItem('token');
+          const res = await fetch('http://localhost:8082/api/ai/scan-message', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sender: messageObj.sender || currentUser?.name || 'Harshini Sasti', content: text, className: 'CSE A' })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.caseCreated && data.caseId) {
+              const dbId = String(data.caseId);
+              setCases(prev => (prev || []).map(c => String(c.id) === String(newCase.id) ? { ...c, id: dbId } : c));
+              const cached = JSON.parse(localStorage.getItem('cached_cases') || '[]');
+              const updatedCached = cached.map(c => String(c.id) === String(newCase.id) ? { ...c, id: dbId } : c);
+              localStorage.setItem('cached_cases', JSON.stringify(updatedCached));
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
     const token = localStorage.getItem('token');
     try {
       await fetch('http://localhost:8082/api/chats', {
@@ -585,6 +758,11 @@ function App() {
       if (res.ok) {
         const saved = await res.json();
         setCounselingSlots(prev => (prev || []).map(s => String(s.id) === String(tempId) ? saved : s));
+        try {
+          const cached = JSON.parse(localStorage.getItem('cached_counseling_slots') || '[]');
+          const filtered = cached.filter(s => String(s.id) !== String(tempId));
+          localStorage.setItem('cached_counseling_slots', JSON.stringify([...filtered, saved]));
+        } catch (e) {}
       }
       refreshData();
     } catch (e) { console.error(e); }

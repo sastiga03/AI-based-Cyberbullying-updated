@@ -13,6 +13,7 @@ public class UserDto {
     private String address;
     private String dept;
     private String batch;
+    private String subjects;
     private String profilePhotoUrl;
     private String password;
 
@@ -29,6 +30,7 @@ public class UserDto {
         this.address = user.getAddress();
         this.dept = user.getDept();
         this.batch = user.getBatch();
+        this.subjects = user.getSubjects();
         this.profilePhotoUrl = user.getProfilePhotoUrl();
     }
 
@@ -111,6 +113,14 @@ public class UserDto {
 
     public void setProfilePhotoUrl(String profilePhotoUrl) {
         this.profilePhotoUrl = profilePhotoUrl;
+    }
+
+    public String getSubjects() {
+        return subjects;
+    }
+
+    public void setSubjects(String subjects) {
+        this.subjects = subjects;
     }
 
     public String getPassword() {

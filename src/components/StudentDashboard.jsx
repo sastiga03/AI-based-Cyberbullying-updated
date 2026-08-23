@@ -5,8 +5,9 @@ import {
   Sun, Moon, Clock, Download, Check, RefreshCw
 } from 'lucide-react';
 import React, { useState, useRef, useEffect } from 'react';
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { STUDENT_RULES } from '../mockData';
+import { analyzeCyberbullying } from '../utils/aiDetector';
 
 export default function StudentDashboard({ 
   user, 
@@ -14,7 +15,7 @@ export default function StudentDashboard({
   announcements, 
   readAnnouncements = [],
   markAnnouncementAsRead, 
-  tasks, 
+  tasks: rawTasks, 
   submitTask, 
   submissions, 
   chats, 
@@ -73,12 +74,13 @@ export default function StudentDashboard({
   const isDeptMatch = (dept1, dept2) => {
     const d1 = (dept1 || '').trim().toLowerCase();
     const d2 = (dept2 || '').trim().toLowerCase();
-    if (d1 === d2) return true;
+    if (!d1 || !d2) return false;
+    if (d1 === d2 || d1.includes(d2) || d2.includes(d1)) return true;
     
     const clean = (s) => s.replace(/and/g, '').replace(/&/g, '').replace(/[^a-z0-9]/g, '');
     const c1 = clean(d1);
     const c2 = clean(d2);
-    if (c1 === c2) return true;
+    if (c1 === c2 || c1.includes(c2) || c2.includes(c1)) return true;
 
     const aliases = {
       'cse': ['computer science', 'computerscienceengineering', 'computerscience', 'cse'],
@@ -93,18 +95,31 @@ export default function StudentDashboard({
     let group2 = null;
     
     for (const [key, list] of Object.entries(aliases)) {
-      if (key === c1 || list.some(item => c1.includes(item) || item.includes(c1))) {
+      const cleanedList = list.map(clean);
+      if (key === c1 || cleanedList.some(item => c1.includes(item) || item.includes(c1))) {
         group1 = key;
       }
-      if (key === c2 || list.some(item => c2.includes(item) || item.includes(c2))) {
+      if (key === c2 || cleanedList.some(item => c2.includes(item) || item.includes(c2))) {
         group2 = key;
       }
     }
     
     if (group1 && group2 && group1 === group2) return true;
     
-    return c1.includes(c2) || c2.includes(c1);
+    return false;
   };
+
+  const isTaskTargetedToStudent = (task, studentUser) => {
+    if (!task.targetClass) return false;
+    if (!studentUser || !studentUser.dept) return false;
+    
+    const targets = task.targetClass.split(',').map(d => d.trim().toLowerCase());
+    const studentDept = studentUser.dept.trim().toLowerCase();
+    
+    return targets.some(target => isDeptMatch(target, studentDept));
+  };
+
+  const tasks = (rawTasks || []).filter(t => isTaskTargetedToStudent(t, user));
 
   // Calculate dynamic chat contacts (Student-to-Student within the same department)
   const chatContacts = new Map();
@@ -164,13 +179,17 @@ export default function StudentDashboard({
 
   // Chart data
   const assignedCount = tasks.length;
-  const completedCount = submissions.filter(s => s.studentName === user.name).length;
-  const safetyScore = 92; // Constant static base or custom
+  const mySubmissions = (submissions || []).filter(s => 
+    s.studentName === user.name && 
+    tasks.some(t => t.title.toLowerCase() === (s.taskTitle || '').toLowerCase())
+  );
+  const completedCount = mySubmissions.length;
+  const pendingCount = Math.max(0, assignedCount - completedCount);
 
   const chartData = [
-    { name: 'Assigned Tasks', count: assignedCount },
+    { name: 'Total Tasks', count: assignedCount },
     { name: 'Completed Tasks', count: completedCount },
-    { name: 'Safety Score (%)', count: safetyScore }
+    { name: 'Pending Tasks', count: pendingCount }
   ];
 
   // Drag and Drop helpers for Task Submit
@@ -425,7 +444,10 @@ export default function StudentDashboard({
     return acc + unreadCount;
   }, 0);
 
-  const materialsCount = (materials || []).filter(m => !readMaterials.includes(m.id)).length;
+  const materialsCount = (materials || [])
+    .filter(m => isDeptMatch(m.dept, user.dept))
+    .filter(m => !readMaterials.includes(m.id))
+    .length;
   const unreadAnnouncementsCount = (announcements || []).filter(a => !a.read).length;
 
   const getGreeting = () => {
@@ -607,20 +629,18 @@ export default function StudentDashboard({
               {/* Task Completion Graph */}
               <div className="glass-panel chart-card" style={{ height: '350px' }}>
                 <div className="chart-header">
-                  <h3 style={{ fontSize: '1.1rem' }}>Task Completion Process & Safety Metrics</h3>
+                  <h3 style={{ fontSize: '1.1rem' }}>Task Completion Process</h3>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Real-time Statistics</span>
                 </div>
                 <div style={{ width: '100%', height: 260 }}>
                   <ResponsiveContainer>
-                    <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <BarChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" scale="point" padding={{ left: 30, right: 30 }} />
-                      <YAxis domain={[0, 100]} />
+                      <XAxis dataKey="name" />
+                      <YAxis />
                       <Tooltip />
-                      <Legend />
-                      <Bar dataKey="count" barSize={40} fill="var(--primary)" radius={[4, 4, 0, 0]} name="Value / Count" />
-                      <Line type="monotone" dataKey="count" stroke="var(--accent)" strokeWidth={3} name="Safety Score Curve" />
-                    </ComposedChart>
+                      <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} barSize={40} name="Tasks Count" />
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
@@ -857,6 +877,7 @@ export default function StudentDashboard({
                     <thead>
                       <tr>
                         <th>Task Name</th>
+                        <th>Subject</th>
                         <th>Instructor</th>
                         <th>Due Date</th>
                         <th>Status</th>
@@ -887,6 +908,11 @@ export default function StudentDashboard({
                           return (
                             <tr key={task.id}>
                               <td style={{ fontWeight: '600' }}>{task.title}</td>
+                              <td>
+                                <span className="badge badge-info" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
+                                  {task.subject || 'General'}
+                                </span>
+                              </td>
                               <td>{task.instructor}</td>
                               <td>{task.dueDate}</td>
                               <td>
@@ -918,7 +944,7 @@ export default function StudentDashboard({
                         return isSub;
                       }).length === 0 && (
                         <tr>
-                          <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
                             No tasks found matching this criteria.
                           </td>
                         </tr>
@@ -950,7 +976,7 @@ export default function StudentDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {submissions.filter(s => s.studentName === user.name).map((sub, idx) => (
+                  {mySubmissions.map((sub, idx) => (
                     <tr key={idx}>
                       <td style={{ fontWeight: '600' }}>{sub.taskTitle}</td>
                       <td>{sub.date}</td>
@@ -965,12 +991,12 @@ export default function StudentDashboard({
                       <td>
                         {/* Mask the AI results for students except simple safe status */}
                         <span className={`badge ${sub.severityScore > 30 ? 'badge-warning' : 'badge-success'}`}>
-                          {sub.severityScore > 30 ? 'Under Review' : 'Verified Safe'}
+                          {sub.severityScore > 30 ? 'Flagged' : 'Verified Safe'}
                         </span>
                       </td>
                     </tr>
                   ))}
-                  {submissions.filter(s => s.studentName === user.name).length === 0 && (
+                  {mySubmissions.length === 0 && (
                     <tr>
                       <td colSpan="4" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
                         No submissions recorded yet.
@@ -1049,25 +1075,38 @@ export default function StudentDashboard({
 
                 {/* Messages log */}
                 <div className="chat-messages-log">
-                  {(chats[selectedContact] || []).map((msg, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`chat-bubble ${msg.sender === user.name ? 'sent' : 'received'}`}
-                    >
-                      <p style={{ fontSize: '0.9rem' }}>{msg.text}</p>
-                      <span style={{ display: 'block', fontSize: '0.65rem', textAlign: 'right', marginTop: '4px', opacity: 0.7 }}>
-                        {msg.time}
-                      </span>
-                    </div>
-                  ))}
+                  {(chats[selectedContact] || []).map((msg, idx) => {
+                    const aiAnalysis = analyzeCyberbullying(msg.text);
+                    const isFlagged = msg.isFlagged || aiAnalysis.isBullying;
+
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`chat-bubble ${msg.sender === user.name ? 'sent' : 'received'} ${isFlagged ? 'flagged' : ''}`}
+                        style={isFlagged ? {
+                          border: '2px solid #ef4444',
+                          background: 'rgba(239, 68, 68, 0.28)',
+                          color: '#ffffff'
+                        } : {}}
+                      >
+                        <p style={{ fontSize: '0.9rem' }}>{msg.text}</p>
+                        {isFlagged && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', color: '#ff8080', fontWeight: 'bold', marginTop: '6px' }}>
+                            <span>🛡️</span>
+                            <span>AI Flagged: {aiAnalysis.category} ({aiAnalysis.severityScore}%)</span>
+                          </div>
+                        )}
+                        <span style={{ display: 'block', fontSize: '0.65rem', textAlign: 'right', marginTop: '4px', opacity: 0.7 }}>
+                          {msg.time}
+                        </span>
+                      </div>
+                    );
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
 
                 {/* Improved type a message input section */}
                 <div className="chat-input-bar">
-                  <button className="icon-badge-btn" style={{ margin: 0, color: 'var(--text-muted)' }} title="Attach file">
-                    <Paperclip size={18} />
-                  </button>
                   <div className="chat-input-container">
                     <input 
                       type="text" 
@@ -1481,7 +1520,8 @@ export default function StudentDashboard({
               if (selectedTeacherMaterials) {
                 // Find all materials matching this selected teacher
                 const teacherMaterials = (materials || []).filter(m => {
-                  return getCanonicalTeacherName(m.teacherName) === selectedTeacherMaterials || isTeacherMatch(m.teacherName, selectedTeacherMaterials);
+                  const nameMatch = getCanonicalTeacherName(m.teacherName) === selectedTeacherMaterials || isTeacherMatch(m.teacherName, selectedTeacherMaterials);
+                  return nameMatch && isDeptMatch(m.dept, user.dept);
                 });
 
                 return (
@@ -1510,6 +1550,9 @@ export default function StudentDashboard({
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                               <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{mat.title}</h3>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="badge badge-info" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)' }}>
+                                  {mat.subject || 'General'}
+                                </span>
                                 {isRead && (
                                   <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
                                     Read
@@ -1597,8 +1640,7 @@ export default function StudentDashboard({
               }
 
               // 1. Gather all teachers from materials
-              const deptMaterials = (materials || []).filter(m => isDeptMatch(m.dept, user.dept));
-              const activeMaterials = deptMaterials.length > 0 ? deptMaterials : (materials || []);
+              const activeMaterials = (materials || []).filter(m => isDeptMatch(m.dept, user.dept));
               const materialTeacherNames = Array.from(new Set(activeMaterials.map(m => getCanonicalTeacherName(m.teacherName)).filter(Boolean)));
 
               // 2. Teachers from users database
@@ -1627,7 +1669,8 @@ export default function StudentDashboard({
                     {uniqueTeachers.map((teacherName, idx) => {
                       const teacherObj = (users || []).find(u => getCanonicalTeacherName(u.name) === teacherName || isTeacherMatch(u.name, teacherName));
                       const teacherMats = (materials || []).filter(m => {
-                        return getCanonicalTeacherName(m.teacherName) === teacherName || isTeacherMatch(m.teacherName, teacherName);
+                        const nameMatch = getCanonicalTeacherName(m.teacherName) === teacherName || isTeacherMatch(m.teacherName, teacherName);
+                        return nameMatch && isDeptMatch(m.dept, user.dept);
                       });
 
                       const totalMatsCount = teacherMats.length;

@@ -7,6 +7,7 @@ public class ProfileUpdateRequest {
     private String address;
     private String dept;
     private String batch;
+    private String subjects;
     private String profilePhotoUrl;
 
     // Getters and Setters
@@ -56,5 +57,13 @@ public class ProfileUpdateRequest {
 
     public void setProfilePhotoUrl(String profilePhotoUrl) {
         this.profilePhotoUrl = profilePhotoUrl;
+    }
+
+    public String getSubjects() {
+        return subjects;
+    }
+
+    public void setSubjects(String subjects) {
+        this.subjects = subjects;
     }
 }

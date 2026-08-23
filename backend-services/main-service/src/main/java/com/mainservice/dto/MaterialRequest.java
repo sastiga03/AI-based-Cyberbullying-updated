@@ -11,6 +11,7 @@ public class MaterialRequest {
     private String fileName;
     private String fileUrl;
     private String dept;
+    private String subject;
 
     // Getters and Setters
     public String getTitle() {
@@ -51,5 +52,13 @@ public class MaterialRequest {
 
     public void setDept(String dept) {
         this.dept = dept;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
     }
 }

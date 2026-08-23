@@ -533,6 +533,12 @@
   border: 1px solid var(--border-glass);
 }
 
+.chat-bubble.flagged {
+  border: 2px solid var(--danger) !important;
+  background: rgba(239, 68, 68, 0.28) !important;
+  color: #fff !important;
+}
+
 .chat-input-bar {
   padding: 16px 24px;
   border-top: 1px solid var(--border-glass);

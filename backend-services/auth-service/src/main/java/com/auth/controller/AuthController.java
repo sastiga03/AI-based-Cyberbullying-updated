@@ -24,4 +24,9 @@ public class AuthController {
         LoginResponse response = userService.authenticateUser(loginRequest);
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout() {
+        return ResponseEntity.ok(java.util.Map.of("message", "Logged out successfully"));
+    }
 }

@@ -54,6 +54,9 @@ public class SubmissionController {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Value("${app.upload.dir:./uploads}")
+    private String uploadDir;
+
     @PostMapping
     public ResponseEntity<Submission> submitTask(@Valid @RequestBody SubmissionRequest request) {
         String studentName = SecurityUtils.getCurrentUserName();
@@ -75,7 +78,52 @@ public class SubmissionController {
             matchedTask = taskRepository.save(matchedTask);
         }
 
-        CyberbullyingAnalyzer.AnalysisResult analysis = cyberbullyingAnalyzer.analyze(request.getComment());
+        // 1. Analyze Comment / Remarks
+        String commentText = request.getComment() == null ? "" : request.getComment();
+        CyberbullyingAnalyzer.AnalysisResult commentAnalysis = cyberbullyingAnalyzer.analyze(commentText);
+
+        // 2. Extract and Analyze File Content (e.g. .docx, .txt, .csv)
+        CyberbullyingAnalyzer.AnalysisResult fileAnalysis = null;
+        String fileTextContent = "";
+        String fileUrl = request.getFileUrl();
+        String fileName = request.getFileName();
+
+        if (fileUrl != null && fileUrl.contains("/download/")) {
+            String storedName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+            try {
+                java.nio.file.Path filePath = java.nio.file.Paths.get(uploadDir).resolve(storedName).toAbsolutePath().normalize();
+                if (java.nio.file.Files.exists(filePath)) {
+                    try (java.io.InputStream is = java.nio.file.Files.newInputStream(filePath)) {
+                        fileTextContent = com.mainservice.util.DocumentTextExtractor.extractText(is, fileName);
+                    }
+                    if (fileTextContent != null && !fileTextContent.trim().isEmpty()) {
+                        fileAnalysis = cyberbullyingAnalyzer.analyze(fileTextContent);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error reading submitted file content: " + e.getMessage());
+            }
+        }
+
+        // 3. Combine Results
+        boolean isFlagged = "Flagged".equalsIgnoreCase(commentAnalysis.getFlagStatus()) ||
+                            (fileAnalysis != null && "Flagged".equalsIgnoreCase(fileAnalysis.getFlagStatus()));
+        
+        int finalSeverity = commentAnalysis.getSeverityScore();
+        String finalResult = commentAnalysis.getResult();
+        String finalCategory = commentAnalysis.getCategory();
+        String combinedContent = commentText;
+
+        if (fileAnalysis != null && fileAnalysis.getSeverityScore() > finalSeverity) {
+            finalSeverity = fileAnalysis.getSeverityScore();
+            finalResult = fileAnalysis.getResult();
+            finalCategory = fileAnalysis.getCategory();
+        }
+
+        if (fileAnalysis != null && "Flagged".equalsIgnoreCase(fileAnalysis.getFlagStatus())) {
+            combinedContent = "Uploaded File Content (" + fileName + "): " + fileTextContent + 
+                              (!commentText.trim().isEmpty() ? " | Comment: " + commentText : "");
+        }
 
         Submission submission = new Submission();
         submission.setTask(matchedTask);
@@ -85,12 +133,27 @@ public class SubmissionController {
         submission.setDate(LocalDate.now());
         submission.setStatus("Received");
         submission.setFeedback("Awaiting Review");
-        submission.setSeverityScore(analysis.getSeverityScore());
-        submission.setFlagStatus(analysis.getFlagStatus());
+        submission.setSeverityScore(finalSeverity);
+        submission.setFlagStatus(isFlagged ? "Flagged" : "Safe");
         submission.setStudentName(studentName);
-        submission.setContent(request.getComment());
+        submission.setContent(combinedContent);
 
         Submission saved = submissionRepository.save(submission);
+
+        // 4. Auto-escalate to Counselor Cases if either the file content or comment is flagged
+        if (isFlagged) {
+            CyberbullyingCase newCase = new CyberbullyingCase();
+            newCase.setStudentName(studentName);
+            newCase.setClassName("CSE A");
+            newCase.setSeverity(finalSeverity + "%");
+            newCase.setDate(LocalDate.now());
+            newCase.setContent(combinedContent);
+            newCase.setStatus("Pending");
+            newCase.setDecision("");
+            newCase.setResult(finalResult);
+            caseRepository.save(newCase);
+        }
+
         return ResponseEntity.ok(saved);
     }
 

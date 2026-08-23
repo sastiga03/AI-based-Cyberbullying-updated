@@ -23,6 +23,17 @@ public class AnnouncementController {
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getAnnouncements() {
         String email = SecurityUtils.getCurrentUserEmail();
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String userRole = "Student"; // default fallback
+        if (auth != null && auth.getPrincipal() instanceof com.mainservice.security.UserPrincipal) {
+            com.mainservice.security.UserPrincipal principal = (com.mainservice.security.UserPrincipal) auth.getPrincipal();
+            if (!principal.getAuthorities().isEmpty()) {
+                String authRole = principal.getAuthorities().iterator().next().getAuthority()
+                        .replace("ROLE_", "");
+                userRole = authRole.substring(0, 1).toUpperCase() + authRole.substring(1).toLowerCase();
+            }
+        }
+
         List<Announcement> list = announcementRepository.findAll();
         List<Map<String, Object>> result = new ArrayList<>();
         
@@ -35,15 +46,31 @@ public class AnnouncementController {
         }
 
         for (Announcement a : list) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", a.getId());
-            map.put("title", a.getTitle());
-            map.put("content", a.getContent());
-            map.put("date", a.getDate());
-            map.put("postedBy", a.getPostedBy());
-            map.put("targetRole", a.getTargetRole());
-            map.put("read", readIds.contains(a.getId()));
-            result.add(map);
+            String target = a.getTargetRole();
+            if (target == null) target = "All";
+
+            boolean display = false;
+            if (userRole.equalsIgnoreCase("Principal")) {
+                display = true;
+            } else {
+                if (target.equalsIgnoreCase("All")) {
+                    display = true;
+                } else if (target.equalsIgnoreCase(userRole)) {
+                    display = true;
+                }
+            }
+
+            if (display) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", a.getId());
+                map.put("title", a.getTitle());
+                map.put("content", a.getContent());
+                map.put("date", a.getDate());
+                map.put("postedBy", a.getPostedBy());
+                map.put("targetRole", a.getTargetRole());
+                map.put("read", readIds.contains(a.getId()));
+                result.add(map);
+            }
         }
         return ResponseEntity.ok(result);
     }

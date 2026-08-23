@@ -5,6 +5,7 @@ import {
   Sun, Moon, Bell, Calendar, Clock
 } from 'lucide-react';
 import { COUNSELOR_RULES } from '../mockData';
+import { analyzeCyberbullying } from '../utils/aiDetector';
 
 export default function CounselorDashboard({ 
   user, 
@@ -80,19 +81,71 @@ export default function CounselorDashboard({
 
   const photoInputRef = useRef(null);
 
-  // Statistics
-  const pendingCasesCount = cases.filter(c => c.status === 'Pending').length;
-  const totalCasesCount = cases.length;
-  const resolvedCasesCount = cases.filter(c => c.status === 'Resolved').length;
+  // Filter out any safe negated messages that were legacy or not harmful
+  const validCases = (cases || []).filter(c => {
+    if (!c || !c.content) return true;
+    const lower = c.content.toLowerCase();
+    if (lower.includes('not ugly') || lower.includes("don't worry") || lower.includes('dont worry')) {
+      const analysis = analyzeCyberbullying(c.content);
+      return analysis.isBullying;
+    }
+    return true;
+  });
 
-  // Top 5 Flagged Persons (highest severity)
-  const topFlaggedPersons = [
-    { name: 'Thrisha', dept: 'CIVIL', incident: 'Threatening', severity: '95%', flags: 4 },
-    { name: 'Rahul', dept: 'CSE', incident: 'Harassment', severity: '87%', flags: 5 },
-    { name: 'Thejan', dept: 'IT', incident: 'Bullying', severity: '80%', flags: 3 },
-    { name: 'Sneha', dept: 'Algorithm', incident: 'Exclusion', severity: '72%', flags: 2 },
-    { name: 'Mouna', dept: 'CSE', incident: 'Mocking', severity: '47%', flags: 2 }
-  ];
+  // Statistics
+  const pendingCasesCount = validCases.filter(c => c.status === 'Pending').length;
+  const totalCasesCount = validCases.length;
+  const resolvedCasesCount = validCases.filter(c => c.status === 'Resolved').length;
+
+  // Dynamic Top 5 Flagged Persons calculated from real-time AI cases
+  const topFlaggedPersons = (() => {
+    const counts = {};
+    const defaultSeed = [
+      { name: 'Thrisha', dept: 'CIVIL', incident: 'Threat', severity: '95%', flags: 4 },
+      { name: 'Rahul', dept: 'CSE', incident: 'Harassment', severity: '87%', flags: 5 },
+      { name: 'Thejan', dept: 'IT', incident: 'Insult', severity: '80%', flags: 3 },
+      { name: 'Sneha', dept: 'ECE', incident: 'Exclusion', severity: '72%', flags: 2 },
+      { name: 'Mouna', dept: 'CSE', incident: 'Insult', severity: '47%', flags: 2 }
+    ];
+
+    validCases.forEach(c => {
+      if (!c || !c.studentName) return;
+      const sName = c.studentName;
+      if (!counts[sName]) {
+        counts[sName] = {
+          name: sName,
+          dept: c.className || 'CSE',
+          incident: c.result ? c.result.split('------')[0].trim() : 'Cyberbullying',
+          severity: c.severity || '75%',
+          flags: 0
+        };
+      }
+      counts[sName].flags += 1;
+      const currentSev = parseInt(String(counts[sName].severity).replace('%', '')) || 0;
+      const newSev = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+      if (newSev > currentSev) {
+        counts[sName].severity = `${newSev}%`;
+        if (c.result) {
+          counts[sName].incident = c.result.split('------')[0].trim();
+        }
+      }
+    });
+
+    const list = Object.values(counts);
+    defaultSeed.forEach(seed => {
+      if (!list.some(item => item.name.toLowerCase() === seed.name.toLowerCase())) {
+        list.push(seed);
+      }
+    });
+
+    list.sort((a, b) => {
+      const sevA = parseInt(String(a.severity).replace('%', '')) || 0;
+      const sevB = parseInt(String(b.severity).replace('%', '')) || 0;
+      return (b.flags * 100 + sevB) - (a.flags * 100 + sevA);
+    });
+
+    return list.slice(0, 5);
+  })();
 
   const isTimePassed = (timingStr) => {
     if (!timingStr) return false;
@@ -459,7 +512,7 @@ export default function CounselorDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {cases
+                  {validCases
                     .filter(c => {
                       if (caseFilterDropdown === 'Pending') return c.status === 'Pending';
                       if (caseFilterDropdown === 'Resolved') return c.status === 'Resolved';
@@ -480,7 +533,7 @@ export default function CounselorDashboard({
                         </td>
                       </tr>
                     ))}
-                  {cases.filter(c => {
+                  {validCases.filter(c => {
                     if (caseFilterDropdown === 'Pending') return c.status === 'Pending';
                     if (caseFilterDropdown === 'Resolved') return c.status === 'Resolved';
                     return true;
@@ -500,7 +553,7 @@ export default function CounselorDashboard({
               <div>
                 <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Incident Action Panel</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {cases.filter(c => c.status === 'Pending').map((c) => (
+                  {validCases.filter(c => c.status === 'Pending').map((c) => (
                     <div key={c.id} className="glass-panel" style={{ padding: '20px', borderLeft: '4px solid var(--danger)', background: 'var(--bg-tertiary)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <span style={{ fontWeight: 'bold' }}>{c.studentName} ({c.className})</span>

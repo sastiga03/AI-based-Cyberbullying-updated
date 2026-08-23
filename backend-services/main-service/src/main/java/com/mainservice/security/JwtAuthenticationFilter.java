@@ -38,6 +38,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String email = claims.get("email", String.class);
                 String name = claims.get("name", String.class);
                 String role = claims.get("role", String.class);
+                if (role != null) {
+                    role = role.trim();
+                    if (!role.toUpperCase().startsWith("ROLE_")) {
+                        role = "ROLE_" + role.toUpperCase();
+                    } else {
+                        role = role.toUpperCase();
+                    }
+                } else {
+                    role = "ROLE_STUDENT";
+                }
 
                 SimpleGrantedAuthority authority = new SimpleGrantedAuthority(role);
                 UserPrincipal principal = new UserPrincipal(userId, name, email, Collections.singletonList(authority));

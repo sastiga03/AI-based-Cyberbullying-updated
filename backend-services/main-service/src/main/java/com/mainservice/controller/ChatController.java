@@ -78,7 +78,7 @@ public class ChatController {
             newCase.setClassName("CSE A"); 
             newCase.setSeverity(analysis.getSeverityScore() + "%");
             newCase.setDate(LocalDate.now());
-            newCase.setContent("Chat Message to " + recipientName + ": " + text);
+            newCase.setContent(text);
             newCase.setStatus("Pending");
             newCase.setDecision("");
             newCase.setResult(analysis.getResult());

@@ -28,9 +28,6 @@ export default function PrincipalDashboard({
   const [annTargetRole, setAnnTargetRole] = useState('All');
   const [annTitle, setAnnTitle] = useState('');
   const [annDesc, setAnnDesc] = useState('');
-  const [annFile, setAnnFile] = useState(null);
-  const [annDragActive, setAnnDragActive] = useState(false);
-  const annFileInputRef = useRef(null);
 
   // Settings States
   const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
@@ -52,17 +49,39 @@ export default function PrincipalDashboard({
   const totalCasesCount = cases.length;
   const campusSafetyScore = 91; // 91% Excellent!
 
-  // Severity analysis table data: High to Low severity
-  const severityRecords = [
-    { name: 'Thrisha', dept: 'CIVIL C', severity: 95, status: 'Unresolved' },
-    { name: 'Rahul', dept: 'CSE A', severity: 87, status: 'Unresolved' },
-    { name: 'Thejan', dept: 'IT A', severity: 80, status: 'Resolved' },
-    { name: 'Jaya She', dept: 'CSE B', severity: 85, status: 'Unresolved' },
-    { name: 'Mouna', dept: 'CSE B', severity: 47, status: 'Unresolved' },
-    { name: 'Aakil', dept: 'ECE C', severity: 22, status: 'Resolved' },
-    { name: 'Asin', dept: 'IT A', severity: 4, status: 'Resolved' },
-    { name: 'Sanjai', dept: 'ECE C', severity: 2, status: 'Resolved' }
-  ].sort((a, b) => b.severity - a.severity);
+  // Dynamic severity analysis table data: High to Low severity
+  const severityRecords = (() => {
+    const defaultSeed = [
+      { name: 'Thrisha', dept: 'CIVIL C', severity: 95, status: 'Unresolved' },
+      { name: 'Rahul', dept: 'CSE A', severity: 87, status: 'Unresolved' },
+      { name: 'Thejan', dept: 'IT A', severity: 80, status: 'Resolved' },
+      { name: 'Jaya She', dept: 'CSE B', severity: 85, status: 'Unresolved' },
+      { name: 'Mouna', dept: 'CSE B', severity: 47, status: 'Unresolved' },
+      { name: 'Aakil', dept: 'ECE C', severity: 22, status: 'Resolved' },
+      { name: 'Asin', dept: 'IT A', severity: 4, status: 'Resolved' },
+      { name: 'Sanjai', dept: 'ECE C', severity: 2, status: 'Resolved' }
+    ];
+
+    const mapped = (cases || []).map(c => {
+      const numSev = parseInt(String(c.severity || '0').replace('%', '')) || 0;
+      return {
+        id: c.id,
+        name: c.studentName || 'Student',
+        dept: c.className || 'CSE A',
+        severity: numSev,
+        status: c.status === 'Resolved' ? 'Resolved' : 'Unresolved'
+      };
+    });
+
+    const combined = [...mapped];
+    defaultSeed.forEach(seed => {
+      if (!combined.some(item => item.name.toLowerCase() === seed.name.toLowerCase())) {
+        combined.push(seed);
+      }
+    });
+
+    return combined.sort((a, b) => b.severity - a.severity);
+  })();
 
   // Save changes settings
   const handleSaveSettings = (e) => {
@@ -180,23 +199,13 @@ export default function PrincipalDashboard({
         {activeTab === 'dashboard' && (
           <div>
             {/* Executive Status Cards */}
-            <div className="dashboard-grid">
-              <div className="glass-panel stat-card">
-                <div className="stat-icon" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}>
-                  <ShieldCheck size={24} />
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>CAMPUS SAFETY SCORE</span>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--success)' }}>{campusSafetyScore}%</span>
-                </div>
-              </div>
-
+            <div className="dashboard-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <div className="glass-panel stat-card">
                 <div className="stat-icon" style={{ background: 'var(--danger-glow)', color: 'var(--danger)' }}>
                   <AlertTriangle size={24} />
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>UNRESOLVED INCIDENTS</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block' }}>UNRESOLVED CASES</span>
                   <span style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--danger)' }}>{activeCasesCount}</span>
                 </div>
               </div>
@@ -360,13 +369,11 @@ export default function PrincipalDashboard({
               addAnnouncement({
                 title: annTitle,
                 description: annDesc,
-                targetRole: annTargetRole,
-                file: annFile ? annFile.name : null
+                targetRole: annTargetRole
               });
               alert(`Announcement "${annTitle}" successfully published to ${annTargetRole}!`);
               setAnnTitle('');
               setAnnDesc('');
-              setAnnFile(null);
               setActiveTab('dashboard');
             }}>
               <div style={{ marginBottom: '20px' }}>
@@ -408,46 +415,7 @@ export default function PrincipalDashboard({
                 />
               </div>
 
-              {/* Drag and Drop circular upload (optional) */}
-              <div style={{ marginBottom: '28px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Upload Circular PDF/Image (Optional)</label>
-                <div 
-                  className={`drag-drop-zone ${annDragActive ? 'active' : ''}`}
-                  onDragEnter={(e) => { e.preventDefault(); setAnnDragActive(true); }}
-                  onDragOver={(e) => { e.preventDefault(); setAnnDragActive(true); }}
-                  onDragLeave={(e) => { e.preventDefault(); setAnnDragActive(false); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setAnnDragActive(false);
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      setAnnFile(e.dataTransfer.files[0]);
-                    }
-                  }}
-                  onClick={() => annFileInputRef.current.click()}
-                >
-                  <UploadCloud size={32} style={{ color: 'var(--primary)' }} />
-                  <div>
-                    <p style={{ fontSize: '0.85rem', fontWeight: '500' }}>Drag & drop or click to upload</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>PDF, JPG up to 10MB</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    ref={annFileInputRef} 
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setAnnFile(e.target.files[0]);
-                      }
-                    }}
-                  />
-                </div>
-                {annFile && (
-                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                    <FileText size={16} style={{ color: 'var(--primary)' }} />
-                    <span style={{ fontWeight: 'bold' }}>{annFile.name}</span>
-                  </div>
-                )}
-              </div>
+
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setActiveTab('dashboard')} className="btn btn-secondary">Cancel</button>

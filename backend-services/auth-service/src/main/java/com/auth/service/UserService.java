@@ -90,6 +90,7 @@ public class UserService {
         user.setAddress(userDto.getAddress());
         user.setDept(userDto.getDept());
         user.setBatch(userDto.getBatch());
+        user.setSubjects(userDto.getSubjects());
         user.setProfilePhotoUrl(userDto.getProfilePhotoUrl());
 
         User savedUser = userRepository.save(user);
@@ -109,6 +110,7 @@ public class UserService {
         if (userDto.getAddress() != null) user.setAddress(userDto.getAddress());
         if (userDto.getDept() != null) user.setDept(userDto.getDept());
         if (userDto.getBatch() != null) user.setBatch(userDto.getBatch());
+        if (userDto.getSubjects() != null) user.setSubjects(userDto.getSubjects());
         if (userDto.getProfilePhotoUrl() != null) user.setProfilePhotoUrl(userDto.getProfilePhotoUrl());
         if (userDto.getPassword() != null && !userDto.getPassword().trim().isEmpty()) {
             user.setPassword(passwordEncoder.encode(userDto.getPassword()));
@@ -135,6 +137,7 @@ public class UserService {
         if (request.getAddress() != null) user.setAddress(request.getAddress());
         if (request.getDept() != null) user.setDept(request.getDept());
         if (request.getBatch() != null) user.setBatch(request.getBatch());
+        if (request.getSubjects() != null) user.setSubjects(request.getSubjects());
         if (request.getProfilePhotoUrl() != null) user.setProfilePhotoUrl(request.getProfilePhotoUrl());
 
         User updatedUser = userRepository.save(user);
