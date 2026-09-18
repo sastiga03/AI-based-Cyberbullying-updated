@@ -10,4 +10,5 @@ public interface SubmissionRepository extends MongoRepository<Submission, String
     List<Submission> findByStudentName(String studentName);
     List<Submission> findByFlagStatus(String flagStatus);
     List<Submission> findByStudentNameAndFlagStatus(String studentName, String flagStatus);
+    List<Submission> findByTaskTitle(String taskTitle);
 }

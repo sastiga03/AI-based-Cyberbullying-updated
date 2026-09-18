@@ -8,15 +8,6 @@ import CounselorDashboard from './components/CounselorDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import PrincipalDashboard from './components/PrincipalDashboard';
 
-import { 
-  INITIAL_ANNOUNCEMENTS, 
-  INITIAL_TASKS, 
-  INITIAL_HIDDEN_TASKS, 
-  INITIAL_SUBMISSIONS, 
-  INITIAL_CASES, 
-  INITIAL_CHATS, 
-  INITIAL_USERS 
-} from './mockData';
 import { analyzeCyberbullying } from './utils/aiDetector';
 
 function App() {
@@ -48,15 +39,14 @@ function App() {
       const saved = localStorage.getItem('cached_cases');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.filter(c => {
-          if (!c || !c.content) return true;
-          const lower = c.content.toLowerCase();
-          if (lower.includes('not ugly') || lower.includes("don't worry") || lower.includes('dont worry')) {
-            const analysis = analyzeCyberbullying(c.content);
-            return analysis.isBullying;
-          }
+        const legacyMockNames = ['mouna', 'thejan', 'aakil', 'thrisha', 'jaya she', 'asin', 'sanjai', 'sheriya', 'rahul', 'sneha'];
+        const clean = parsed.filter(c => {
+          if (!c || !c.studentName) return false;
+          if (legacyMockNames.includes(c.studentName.toLowerCase())) return false;
           return true;
         });
+        localStorage.setItem('cached_cases', JSON.stringify(clean));
+        return clean;
       }
     } catch (e) {}
     return [];
@@ -64,7 +54,12 @@ function App() {
   const [chats, setChats] = useState(() => {
     try {
       const saved = localStorage.getItem('cached_chats');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        delete parsed['Jan She'];
+        delete parsed['Sanshetha S'];
+        return parsed;
+      }
     } catch (e) {}
     return {};
   });
@@ -163,7 +158,19 @@ function App() {
       const res = await fetch('http://localhost:8082/api/announcements', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) setAnnouncements(await res.json());
+      if (res.ok) {
+        const raw = await res.json();
+        const clean = (raw || []).filter(a => {
+          if (!a || !a.title) return false;
+          const t = a.title.toLowerCase();
+          const c = (a.content || '').toLowerCase();
+          if (t.includes('1786599') || t.includes('all roles notice') || t.includes('student specific notice') || t.includes('teacher specific notice') || c.includes('test content')) {
+            return false;
+          }
+          return true;
+        });
+        setAnnouncements(clean);
+      }
     } catch (e) { console.error("Error loading announcements:", e); }
 
     // 2. Fetch tasks
@@ -173,8 +180,10 @@ function App() {
       });
       if (res.ok) {
         const allTasks = await res.json();
-        setTasks(allTasks.filter(t => t.visible));
-        setHiddenTasks(allTasks.filter(t => !t.visible));
+        const deletedTaskIds = JSON.parse(localStorage.getItem('deleted_task_ids') || '[]');
+        const validTasks = allTasks.filter(t => !deletedTaskIds.includes(String(t.id)));
+        setTasks(validTasks.filter(t => t.visible));
+        setHiddenTasks(validTasks.filter(t => !t.visible));
       }
     } catch (e) { console.error("Error loading tasks:", e); }
 
@@ -183,7 +192,16 @@ function App() {
       const res = await fetch('http://localhost:8082/api/submissions?all=true', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) setSubmissions(await res.json());
+      if (res.ok) {
+        const allSubs = await res.json();
+        const deletedSubIds = JSON.parse(localStorage.getItem('deleted_sub_ids') || '[]');
+        const deletedTaskTitles = JSON.parse(localStorage.getItem('deleted_task_titles') || '[]');
+        const validSubs = allSubs.filter(s => 
+          !deletedSubIds.includes(String(s.id)) && 
+          !deletedTaskTitles.includes((s.taskTitle || '').trim().toLowerCase())
+        );
+        setSubmissions(validSubs);
+      }
     } catch (e) { console.error("Error loading submissions:", e); }
 
     // 4. Fetch cases
@@ -243,7 +261,11 @@ function App() {
       const res = await fetch('http://localhost:8082/api/materials', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) setMaterials(await res.json());
+      if (res.ok) {
+        const allMaterials = await res.json();
+        const deletedMatIds = JSON.parse(localStorage.getItem('deleted_material_ids') || '[]');
+        setMaterials(allMaterials.filter(m => !deletedMatIds.includes(String(m.id))));
+      }
     } catch (e) { console.error("Error loading materials:", e); }
 
     // 8. Fetch counseling slots
@@ -362,6 +384,7 @@ function App() {
     localStorage.removeItem('user');
     localStorage.removeItem('currentPage');
     setCurrentUser(null);
+    setAnnouncements([]);
     setPage('landing');
   };
 
@@ -458,6 +481,12 @@ function App() {
 
   // 4. Teacher creates a new task
   const createNewTask = async ({ title, desc, dueDate, targetClass, subject, fileName, fileUrl, visible = true }) => {
+    try {
+      const delTitles = JSON.parse(localStorage.getItem('deleted_task_titles') || '[]');
+      const updated = delTitles.filter(t => t !== (title || '').trim().toLowerCase());
+      localStorage.setItem('deleted_task_titles', JSON.stringify(updated));
+    } catch (e) {}
+
     const token = localStorage.getItem('token');
     try {
       await fetch('http://localhost:8082/api/tasks', {
@@ -467,6 +496,65 @@ function App() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ title, desc, dueDate, targetClass, subject, fileName, fileUrl, visible })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // Teacher deletes a task
+  const deleteTask = async (taskId) => {
+    const targetTask = [...(tasks || []), ...(hiddenTasks || [])].find(t => String(t.id) === String(taskId));
+    const targetTitle = targetTask?.title ? targetTask.title.trim().toLowerCase() : null;
+
+    setTasks(prev => (prev || []).filter(t => String(t.id) !== String(taskId)));
+    setHiddenTasks(prev => (prev || []).filter(t => String(t.id) !== String(taskId)));
+
+    if (targetTitle) {
+      setSubmissions(prev => (prev || []).filter(s => (s.taskTitle || '').trim().toLowerCase() !== targetTitle));
+    }
+
+    try {
+      const cached = JSON.parse(localStorage.getItem('cached_tasks') || '[]');
+      localStorage.setItem('cached_tasks', JSON.stringify(cached.filter(t => String(t.id) !== String(taskId))));
+
+      const delIds = JSON.parse(localStorage.getItem('deleted_task_ids') || '[]');
+      if (!delIds.includes(String(taskId))) {
+        localStorage.setItem('deleted_task_ids', JSON.stringify([...delIds, String(taskId)]));
+      }
+
+      if (targetTitle) {
+        const delTitles = JSON.parse(localStorage.getItem('deleted_task_titles') || '[]');
+        if (!delTitles.includes(targetTitle)) {
+          localStorage.setItem('deleted_task_titles', JSON.stringify([...delTitles, targetTitle]));
+        }
+      }
+    } catch (e) {}
+
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8082/api/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // Teacher deletes a student submission
+  const deleteSubmission = async (subId) => {
+    setSubmissions(prev => (prev || []).filter(s => String(s.id) !== String(subId)));
+    try {
+      const delSubs = JSON.parse(localStorage.getItem('deleted_sub_ids') || '[]');
+      if (!delSubs.includes(String(subId))) {
+        localStorage.setItem('deleted_sub_ids', JSON.stringify([...delSubs, String(subId)]));
+      }
+    } catch (e) {}
+
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8082/api/submissions/${subId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -724,6 +812,18 @@ function App() {
     } catch (e) { console.error(e); }
   };
 
+  const deleteMaterial = async (matId) => {
+    setMaterials(prev => (prev || []).filter(m => String(m.id) !== String(matId)));
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8082/api/materials/${matId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
   // 14. Handler to book a counseling slot
   const bookCounseling = async (slotDetails) => {
     const tempId = Date.now().toString();
@@ -804,6 +904,7 @@ function App() {
   // 16. Handler to add a principal announcement
   const addAnnouncement = async (newAnn) => {
     const token = localStorage.getItem('token');
+    const contentText = newAnn.description || newAnn.content || '';
     try {
       await fetch('http://localhost:8082/api/announcements', {
         method: 'POST',
@@ -813,9 +914,34 @@ function App() {
         },
         body: JSON.stringify({
           title: newAnn.title,
-          description: newAnn.description,
+          content: contentText,
+          description: contentText,
           targetRole: newAnn.targetRole
         })
+      });
+      refreshData();
+    } catch (e) { console.error(e); }
+  };
+
+  // Helper to ensure role-specific targeting for campus announcements
+  const getRoleFilteredAnnouncements = (role) => {
+    return (announcements || []).filter(ann => {
+      if (!ann) return false;
+      const target = (ann.targetRole || 'All').trim().toLowerCase();
+      if (!role || role.toLowerCase() === 'principal') return true;
+      if (target === 'all') return true;
+      const r = role.trim().toLowerCase();
+      return target === r || target.startsWith(r) || r.startsWith(target);
+    });
+  };
+
+  // 16b. Handler to delete an announcement
+  const deleteAnnouncement = async (announcementId) => {
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`http://localhost:8082/api/announcements/${announcementId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       refreshData();
     } catch (e) { console.error(e); }
@@ -860,7 +986,7 @@ function App() {
         <StudentDashboard 
           user={currentUser} 
           onLogout={handleLogout}
-          announcements={announcements}
+          announcements={getRoleFilteredAnnouncements('Student')}
           readAnnouncements={readAnnouncements}
           markAnnouncementAsRead={markAnnouncementAsRead}
           tasks={tasks}
@@ -889,7 +1015,9 @@ function App() {
           hiddenTasks={hiddenTasks}
           publishHiddenTask={publishHiddenTask}
           createNewTask={createNewTask}
+          deleteTask={deleteTask}
           submissions={submissions}
+          deleteSubmission={deleteSubmission}
           forwardSubmissionToCounselor={forwardSubmissionToCounselor}
           messages={studentMessages}
           forwardMessageToCounselor={forwardMessageToCounselor}
@@ -898,7 +1026,8 @@ function App() {
           toggleTheme={toggleTheme}
           materials={materials}
           addMaterial={addMaterial}
-          announcements={announcements}
+          deleteMaterial={deleteMaterial}
+          announcements={getRoleFilteredAnnouncements('Teacher')}
           readAnnouncements={readAnnouncements}
           markAnnouncementAsRead={markAnnouncementAsRead}
           forwardedMessages={forwardedMessages}
@@ -921,7 +1050,7 @@ function App() {
           counselingSlots={counselingSlots}
           approveCounselingSlot={approveCounselingSlot}
           updateCounselingSlot={updateCounselingSlot}
-          announcements={announcements}
+          announcements={getRoleFilteredAnnouncements('Counselor')}
           readAnnouncements={readAnnouncements}
           markAnnouncementAsRead={markAnnouncementAsRead}
           forwardedMessages={forwardedMessages}
@@ -945,7 +1074,7 @@ function App() {
           studentMessages={studentMessages}
           updateUser={updateUser}
           setUsers={setUsers}
-          announcements={announcements}
+          announcements={getRoleFilteredAnnouncements('Admin')}
           readAnnouncements={readAnnouncements}
           markAnnouncementAsRead={markAnnouncementAsRead}
         />
@@ -960,6 +1089,7 @@ function App() {
           theme={theme}
           toggleTheme={toggleTheme}
           addAnnouncement={addAnnouncement}
+          deleteAnnouncement={deleteAnnouncement}
           counselingSlots={counselingSlots}
            announcements={announcements}
           readAnnouncements={readAnnouncements}

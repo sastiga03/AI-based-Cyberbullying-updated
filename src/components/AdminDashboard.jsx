@@ -147,17 +147,6 @@ export default function AdminDashboard({
 
   // Dynamic detailed severity monitoring table data (High -> Low severity)
   const severityRecords = (() => {
-    const defaultSeed = [
-      { name: 'Thrisha', dept: 'CIVIL', severity: 95, status: 'Pending' },
-      { name: 'Rahul', dept: 'CSE', severity: 87, status: 'Pending' },
-      { name: 'Thejan', dept: 'IT', severity: 80, status: 'Resolved' },
-      { name: 'Jaya She', dept: 'CSE', severity: 85, status: 'Pending' },
-      { name: 'Mouna', dept: 'CSE', severity: 47, status: 'Pending' },
-      { name: 'Aakil', dept: 'ECE', severity: 22, status: 'Resolved' },
-      { name: 'Asin', dept: 'IT', severity: 4, status: 'Resolved' },
-      { name: 'Sanjai', dept: 'ECE', severity: 2, status: 'Resolved' }
-    ];
-
     const mapped = (cases || []).map(c => {
       const numSev = parseInt(String(c.severity || '0').replace('%', '')) || 0;
       return {
@@ -169,14 +158,7 @@ export default function AdminDashboard({
       };
     });
 
-    const combined = [...mapped];
-    defaultSeed.forEach(seed => {
-      if (!combined.some(item => item.name.toLowerCase() === seed.name.toLowerCase())) {
-        combined.push(seed);
-      }
-    });
-
-    return combined.sort((a, b) => b.severity - a.severity);
+    return mapped.sort((a, b) => b.severity - a.severity);
   })();
 
   // Add user handler
@@ -437,8 +419,7 @@ export default function AdminDashboard({
                         <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ann.title}</span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ann.date}</span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>By Principal</div>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{ann.content}</p>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: '1.5' }}>{ann.content || ann.description || ''}</p>
                       {!isRead && (
                         <button
                           onClick={() => markAnnouncementAsRead(ann.id)}

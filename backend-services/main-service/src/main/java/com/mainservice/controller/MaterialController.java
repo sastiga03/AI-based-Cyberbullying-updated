@@ -43,4 +43,13 @@ public class MaterialController {
         Material saved = materialRepository.save(m);
         return ResponseEntity.ok(saved);
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ResponseEntity<Void> deleteMaterial(@PathVariable String id) {
+        if (materialRepository.existsById(id)) {
+            materialRepository.deleteById(id);
+        }
+        return ResponseEntity.noContent().build();
+    }
 }

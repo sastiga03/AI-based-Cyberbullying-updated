@@ -10,4 +10,5 @@ import java.util.List;
 public interface AnnouncementReadStatusRepository extends MongoRepository<AnnouncementReadStatus, String> {
     Optional<AnnouncementReadStatus> findByUserEmailAndAnnouncementId(String userEmail, String announcementId);
     List<AnnouncementReadStatus> findByUserEmail(String userEmail);
+    List<AnnouncementReadStatus> findByAnnouncementId(String announcementId);
 }

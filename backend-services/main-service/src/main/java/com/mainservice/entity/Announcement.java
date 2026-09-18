@@ -11,6 +11,7 @@ public class Announcement {
     private String id;
     private String title;
     private String content;
+    private String description;
     private LocalDate date;
     private String postedBy; // Principal, Teacher, etc.
     private String targetRole; // All, Student, Teacher, Counselor, etc.
@@ -21,6 +22,7 @@ public class Announcement {
     public Announcement(String title, String content, LocalDate date, String postedBy, String targetRole) {
         this.title = title;
         this.content = content;
+        this.description = content;
         this.date = date;
         this.postedBy = postedBy;
         this.targetRole = targetRole;
@@ -44,11 +46,25 @@ public class Announcement {
     }
 
     public String getContent() {
-        return content;
+        return content != null ? content : description;
     }
 
     public void setContent(String content) {
         this.content = content;
+        if (this.description == null) {
+            this.description = content;
+        }
+    }
+
+    public String getDescription() {
+        return description != null ? description : content;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+        if (this.content == null) {
+            this.content = description;
+        }
     }
 
     public LocalDate getDate() {

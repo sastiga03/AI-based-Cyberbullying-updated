@@ -1,6 +1,8 @@
 package com.mainservice.controller;
 
+import com.mainservice.entity.Submission;
 import com.mainservice.entity.Task;
+import com.mainservice.repository.SubmissionRepository;
 import com.mainservice.repository.TaskRepository;
 import com.mainservice.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +20,9 @@ public class TaskController {
 
     @Autowired
     private TaskRepository taskRepository;
+
+    @Autowired
+    private SubmissionRepository submissionRepository;
 
     @GetMapping
     public ResponseEntity<List<Task>> getTasks(
@@ -68,5 +73,23 @@ public class TaskController {
         task.setVisible(true);
         Task saved = taskRepository.save(task);
         return ResponseEntity.ok(saved);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ResponseEntity<Void> deleteTask(@PathVariable String id) {
+        Task task = taskRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found with id: " + id));
+        if (task.getTitle() != null && !task.getTitle().trim().isEmpty()) {
+            String title = task.getTitle().trim();
+            List<Submission> subs = submissionRepository.findAll();
+            for (Submission s : subs) {
+                if (s.getTaskTitle() != null && s.getTaskTitle().trim().equalsIgnoreCase(title)) {
+                    submissionRepository.delete(s);
+                }
+            }
+        }
+        taskRepository.delete(task);
+        return ResponseEntity.noContent().build();
     }
 }

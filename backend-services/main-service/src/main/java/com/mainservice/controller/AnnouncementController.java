@@ -47,24 +47,29 @@ public class AnnouncementController {
 
         for (Announcement a : list) {
             String target = a.getTargetRole();
-            if (target == null) target = "All";
+            if (target == null || target.trim().isEmpty()) target = "All";
 
             boolean display = false;
             if (userRole.equalsIgnoreCase("Principal")) {
                 display = true;
             } else {
-                if (target.equalsIgnoreCase("All")) {
-                    display = true;
-                } else if (target.equalsIgnoreCase(userRole)) {
+                String normTarget = target.trim().toLowerCase();
+                String normUserRole = userRole.trim().toLowerCase();
+                if (normTarget.equals("all") || 
+                    normTarget.equals(normUserRole) || 
+                    normTarget.startsWith(normUserRole) || 
+                    normUserRole.startsWith(normTarget)) {
                     display = true;
                 }
             }
 
             if (display) {
+                String text = a.getContent() != null ? a.getContent() : (a.getDescription() != null ? a.getDescription() : "");
                 Map<String, Object> map = new HashMap<>();
                 map.put("id", a.getId());
                 map.put("title", a.getTitle());
-                map.put("content", a.getContent());
+                map.put("content", text);
+                map.put("description", text);
                 map.put("date", a.getDate());
                 map.put("postedBy", a.getPostedBy());
                 map.put("targetRole", a.getTargetRole());
@@ -83,6 +88,14 @@ public class AnnouncementController {
         if (announcement.getDate() == null) {
             announcement.setDate(java.time.LocalDate.now());
         }
+        if (announcement.getContent() == null && announcement.getDescription() != null) {
+            announcement.setContent(announcement.getDescription());
+        } else if (announcement.getDescription() == null && announcement.getContent() != null) {
+            announcement.setDescription(announcement.getContent());
+        }
+        if (announcement.getTargetRole() != null) {
+            announcement.setTargetRole(announcement.getTargetRole().trim());
+        }
         Announcement saved = announcementRepository.save(announcement);
         return ResponseEntity.ok(saved);
     }
@@ -100,6 +113,17 @@ public class AnnouncementController {
         }
         Map<String, Boolean> response = new HashMap<>();
         response.put("read", Boolean.TRUE);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, Boolean>> deleteAnnouncement(@PathVariable String id) {
+        announcementRepository.deleteById(id);
+        try {
+            readStatusRepository.deleteAll(readStatusRepository.findByAnnouncementId(id));
+        } catch (Exception ignored) {}
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("deleted", Boolean.TRUE);
         return ResponseEntity.ok(response);
     }
 }

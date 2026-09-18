@@ -178,4 +178,13 @@ public class SubmissionController {
         CyberbullyingCase savedCase = caseRepository.save(newCase);
         return ResponseEntity.ok(savedCase);
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+    public ResponseEntity<Void> deleteSubmission(@PathVariable String id) {
+        if (submissionRepository.existsById(id)) {
+            submissionRepository.deleteById(id);
+        }
+        return ResponseEntity.noContent().build();
+    }
 }

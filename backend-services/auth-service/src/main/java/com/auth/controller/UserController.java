@@ -88,29 +88,8 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> uploadExcel(@RequestParam("file") MultipartFile file) {
         List<UserDto> imported = new ArrayList<>();
-        
-        UserDto user1 = new UserDto();
-        user1.setName("Mouna Dev");
-        user1.setEmail("mounadev@kce.ac.in");
-        user1.setRole("Student");
-        user1.setDept("Computer Science & Engineering");
-        user1.setBatch("2023-2027");
-        try {
-            imported.add(userService.createUser(user1, "mouna123"));
-        } catch (Exception ignored) {}
-
-        UserDto user2 = new UserDto();
-        user2.setName("Thejan Kumar");
-        user2.setEmail("thejankumar@kce.ac.in");
-        user2.setRole("Student");
-        user2.setDept("Information Technology");
-        user2.setBatch("2023-2027");
-        try {
-            imported.add(userService.createUser(user2, "thejan123"));
-        } catch (Exception ignored) {}
-
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "Excel file processed successfully.");
+        response.put("message", "File uploaded successfully.");
         response.put("importedCount", imported.size());
         response.put("users", imported);
         return ResponseEntity.ok(response);

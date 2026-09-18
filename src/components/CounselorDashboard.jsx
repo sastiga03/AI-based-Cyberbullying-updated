@@ -100,13 +100,6 @@ export default function CounselorDashboard({
   // Dynamic Top 5 Flagged Persons calculated from real-time AI cases
   const topFlaggedPersons = (() => {
     const counts = {};
-    const defaultSeed = [
-      { name: 'Thrisha', dept: 'CIVIL', incident: 'Threat', severity: '95%', flags: 4 },
-      { name: 'Rahul', dept: 'CSE', incident: 'Harassment', severity: '87%', flags: 5 },
-      { name: 'Thejan', dept: 'IT', incident: 'Insult', severity: '80%', flags: 3 },
-      { name: 'Sneha', dept: 'ECE', incident: 'Exclusion', severity: '72%', flags: 2 },
-      { name: 'Mouna', dept: 'CSE', incident: 'Insult', severity: '47%', flags: 2 }
-    ];
 
     validCases.forEach(c => {
       if (!c || !c.studentName) return;
@@ -132,11 +125,6 @@ export default function CounselorDashboard({
     });
 
     const list = Object.values(counts);
-    defaultSeed.forEach(seed => {
-      if (!list.some(item => item.name.toLowerCase() === seed.name.toLowerCase())) {
-        list.push(seed);
-      }
-    });
 
     list.sort((a, b) => {
       const sevA = parseInt(String(a.severity).replace('%', '')) || 0;
@@ -442,8 +430,7 @@ export default function CounselorDashboard({
                         <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{ann.title}</span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ann.date}</span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>By Principal</div>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{ann.content}</p>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: '1.5' }}>{ann.content || ann.description || ''}</p>
                       {!isRead && (
                         <button
                           onClick={() => markAnnouncementAsRead(ann.id)}
@@ -749,25 +736,33 @@ export default function CounselorDashboard({
                     Scheduled and finished counseling records.
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {validCounselingSlots.filter(s => s.status === 'Finished' || s.status === 'Approved' || (s.timings && s.timings.length > 0)).length === 0 ? (
+                    {validCounselingSlots.filter(s => s.status === 'Finished' || s.status === 'Completed' || s.status === 'Approved' || (s.timings && s.timings.length > 0)).length === 0 ? (
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
                         No previous incidents or sessions yet.
                       </p>
                     ) : (
-                      validCounselingSlots.filter(s => s.status === 'Finished' || s.status === 'Approved' || (s.timings && s.timings.length > 0)).map(slot => (
-                        <div key={slot.id} style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: slot.status === 'Finished' ? '3px solid var(--success)' : '3px solid var(--primary)' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', display: 'block' }}>
-                            {slot.studentName} (Roll: {slot.rollNo || 'N/A'})
-                          </span>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
-                            Reason: {slot.reason}
-                          </p>
-                          <span style={{ fontSize: '0.7rem', color: slot.status === 'Finished' ? 'var(--success)' : 'var(--primary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Clock size={12} />
-                            {slot.timings || (slot.status === 'Finished' ? 'Completed' : 'Scheduled')}
-                          </span>
-                        </div>
-                      ))
+                      validCounselingSlots.filter(s => s.status === 'Finished' || s.status === 'Completed' || s.status === 'Approved' || (s.timings && s.timings.length > 0)).map(slot => {
+                        const isSlotFinished = slot.status === 'Finished' || slot.status === 'Completed';
+                        return (
+                          <div key={slot.id} style={{ background: 'var(--bg-tertiary)', padding: '14px', borderRadius: '8px', borderLeft: isSlotFinished ? '3px solid var(--success)' : '3px solid var(--primary)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                {slot.studentName} (Roll: {slot.rollNo || 'N/A'})
+                              </span>
+                              <span className={`badge ${isSlotFinished ? 'badge-success' : 'badge-info'}`} style={{ fontSize: '0.68rem', padding: '2px 8px' }}>
+                                {isSlotFinished ? 'Completed' : slot.status}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
+                              Reason: {slot.reason}
+                            </p>
+                            <span style={{ fontSize: '0.7rem', color: isSlotFinished ? 'var(--success)' : 'var(--primary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              {isSlotFinished ? <CheckCircle2 size={13} /> : <Clock size={13} />}
+                              {slot.timings || (isSlotFinished ? 'Completed Session' : 'Scheduled')}
+                            </span>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -780,12 +775,41 @@ export default function CounselorDashboard({
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    {validCounselingSlots.map(slot => {
+                    {validCounselingSlots.filter(s => s.status !== 'Finished' && s.status !== 'Completed').map(slot => {
                       const currentStatus = slotStatuses[slot.id] || slot.status || 'Pending';
                       const timePassed = isTimePassed(slot.timings);
-                      const isFinished = (slot.status === 'Finished');
                       const isPendingAfterTime = (slot.status === 'Pending' && timePassed);
                       const isSubmitted = submittedSlots[slot.id] || (slot.timings && !timePassed);
+
+                      // Prepopulate date and time if slot.timings is set
+                      const initialDate = slot.timings ? (slot.timings.split(' at ')[0] || '').trim() : '';
+                      const initialTime = slot.timings ? (slot.timings.split(' at ')[1] || '').replace(' AM', '').replace(' PM', '').trim() : '';
+                      const selectedDate = slotDates[slot.id] !== undefined ? slotDates[slot.id] : initialDate;
+                      const selectedTime = slotTimes[slot.id] !== undefined ? slotTimes[slot.id] : initialTime;
+
+                      const handleSaveTimings = () => {
+                        if (!selectedDate || !selectedTime) {
+                          alert('Please select both date and time to allocate the slot.');
+                          return;
+                        }
+                        const timingStr = `${selectedDate} at ${selectedTime} AM`;
+                        updateCounselingSlot(slot.id, {
+                          timings: timingStr,
+                          status: slot.status === 'Pending' ? 'Approved' : slot.status
+                        });
+                        setSubmittedSlots(prev => ({ ...prev, [slot.id]: true }));
+                      };
+
+                      const handleMarkCompleted = () => {
+                        let timingStr = slot.timings || '';
+                        if (selectedDate && selectedTime) {
+                          timingStr = `${selectedDate} at ${selectedTime} AM`;
+                        }
+                        updateCounselingSlot(slot.id, {
+                          status: 'Finished',
+                          timings: timingStr
+                        });
+                      };
 
                       return (
                         <div 
@@ -793,14 +817,14 @@ export default function CounselorDashboard({
                           className="glass-panel" 
                           style={{ 
                             padding: '20px', 
-                            background: isFinished ? 'rgba(16, 185, 129, 0.06)' : isPendingAfterTime ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-tertiary)', 
-                            borderLeft: isFinished ? '5px solid var(--success)' : isPendingAfterTime ? '5px solid var(--danger)' : '5px solid var(--primary)',
+                            background: isPendingAfterTime ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-tertiary)', 
+                            borderLeft: isPendingAfterTime ? '5px solid var(--danger)' : '5px solid var(--primary)',
                             borderRadius: '8px'
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                             <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>{slot.studentName} (Roll: {slot.rollNo || 'N/A'})</span>
-                            <span className={`badge ${isFinished ? 'badge-success' : isPendingAfterTime ? 'badge-danger' : 'badge-info'}`} style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
+                            <span className={`badge ${isPendingAfterTime ? 'badge-danger' : 'badge-info'}`} style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
                               {slot.status}
                             </span>
                           </div>
@@ -813,13 +837,6 @@ export default function CounselorDashboard({
                             "{slot.reason}"
                           </p>
 
-                          {isFinished && (
-                            <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', borderRadius: '6px', color: 'var(--success)', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <CheckCircle2 size={18} />
-                              <span>Counselling ended successfully</span>
-                            </div>
-                          )}
-
                           <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
                               <div>
@@ -830,7 +847,7 @@ export default function CounselorDashboard({
                                 <input 
                                   type="date" 
                                   className="form-input"
-                                  value={slotDates[slot.id] !== undefined ? slotDates[slot.id] : ''}
+                                  value={selectedDate}
                                   onChange={(e) => setSlotDates({ ...slotDates, [slot.id]: e.target.value })}
                                 />
                               </div>
@@ -844,7 +861,7 @@ export default function CounselorDashboard({
                                   <input 
                                     type="time" 
                                     className="form-input"
-                                    value={slotTimes[slot.id] !== undefined ? slotTimes[slot.id] : ''}
+                                    value={selectedTime}
                                     onChange={(e) => setSlotTimes({ ...slotTimes, [slot.id]: e.target.value })}
                                     style={{ flex: 1 }}
                                   />
@@ -863,83 +880,81 @@ export default function CounselorDashboard({
                               </div>
                             </div>
 
-                            {!timePassed ? (
-                              <div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-glass)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <button 
                                   type="button"
-                                  disabled={isSubmitted}
-                                  onClick={() => {
-                                    const dateVal = slotDates[slot.id] || '';
-                                    const timeVal = slotTimes[slot.id] || '';
-                                    if (!dateVal || !timeVal) {
-                                      alert('Please select both date and time to allocate the slot.');
-                                      return;
-                                    }
-                                    const timingStr = `${dateVal} at ${timeVal} AM`;
-                                    updateCounselingSlot(slot.id, {
-                                      timings: timingStr,
-                                      status: slot.status || 'Pending'
-                                    });
-                                    setSubmittedSlots(prev => ({ ...prev, [slot.id]: true }));
-                                  }}
+                                  onClick={handleSaveTimings}
                                   className={`btn ${isSubmitted ? 'btn-secondary' : 'btn-primary'}`}
                                   style={{ 
-                                    padding: '8px 22px', 
+                                    padding: '8px 20px', 
                                     fontSize: '0.85rem',
-                                    background: isSubmitted ? 'var(--success)' : undefined,
-                                    color: isSubmitted ? '#fff' : undefined,
-                                    borderColor: isSubmitted ? 'var(--success)' : undefined,
-                                    cursor: isSubmitted ? 'default' : 'pointer'
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
                                   }}
                                 >
-                                  {isSubmitted ? 'Submitted' : 'Submit'}
+                                  <Calendar size={15} />
+                                  <span>{slot.timings ? 'Update Timings' : (isSubmitted ? 'Scheduled' : 'Schedule Slot')}</span>
                                 </button>
                               </div>
-                            ) : (
-                              <div>
-                                <div style={{ marginBottom: '16px' }}>
-                                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                                    Counseling Status:
-                                  </label>
-                                  <select 
-                                    className="form-input"
-                                    value={currentStatus}
-                                    onChange={(e) => setSlotStatuses({ ...slotStatuses, [slot.id]: e.target.value })}
-                                    style={{ maxWidth: '240px' }}
-                                  >
-                                    <option value="Finished">Finished</option>
-                                    <option value="Pending">Pending</option>
-                                  </select>
-                                </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <select 
+                                  className="form-input"
+                                  value={currentStatus}
+                                  onChange={(e) => {
+                                    const newStatus = e.target.value;
+                                    setSlotStatuses({ ...slotStatuses, [slot.id]: newStatus });
+                                    if (newStatus === 'Finished') {
+                                      handleMarkCompleted();
+                                    } else {
+                                      updateCounselingSlot(slot.id, {
+                                        status: newStatus,
+                                        timings: slot.timings || ''
+                                      });
+                                    }
+                                  }}
+                                  style={{ padding: '7px 12px', fontSize: '0.85rem', minWidth: '120px' }}
+                                >
+                                  <option value="Pending">Pending</option>
+                                  <option value="Approved">Approved</option>
+                                  <option value="Finished">Finished</option>
+                                </select>
 
                                 <button 
                                   type="button"
-                                  onClick={() => {
-                                    const dateVal = slotDates[slot.id] || '';
-                                    const timeVal = slotTimes[slot.id] || '';
-                                    let timingStr = slot.timings || '';
-                                    if (dateVal && timeVal) {
-                                      timingStr = `${dateVal} at ${timeVal} AM`;
-                                    }
-                                    updateCounselingSlot(slot.id, {
-                                      status: currentStatus,
-                                      timings: timingStr
-                                    });
+                                  onClick={handleMarkCompleted}
+                                  className="btn"
+                                  style={{ 
+                                    padding: '8px 20px', 
+                                    fontSize: '0.85rem', 
+                                    background: 'var(--success)', 
+                                    color: '#fff', 
+                                    border: '1px solid var(--success)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    borderRadius: '6px'
                                   }}
-                                  className="btn btn-primary"
-                                  style={{ padding: '8px 22px', fontSize: '0.85rem' }}
+                                  title="Mark counseling session as finished. This immediately saves to the database and archives the session into History."
                                 >
-                                  Submit
+                                  <CheckCircle2 size={16} />
+                                  <span>Mark as Completed</span>
                                 </button>
                               </div>
-                            )}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
-                    {validCounselingSlots.length === 0 && (
+                    {validCounselingSlots.filter(s => s.status !== 'Finished' && s.status !== 'Completed').length === 0 && (
                       <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                        No counseling slots requested yet.
+                        <CheckCircle2 size={36} style={{ color: 'var(--success)', margin: '0 auto 12px', display: 'block' }} />
+                        <h4 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '6px' }}>All Sessions Completed</h4>
+                        <p style={{ fontSize: '0.85rem' }}>No active counseling slot bookings remaining. Completed records are archived in Session History on the left.</p>
                       </div>
                     )}
                   </div>

@@ -3,7 +3,7 @@ import {
   MessageSquare, FileText, CheckCircle, CheckCircle2, User, LogOut, 
   UploadCloud, Send, ShieldAlert, BookOpen, Settings, AlertTriangle, 
   Paperclip, Camera, Save, Eye, EyeOff, PlusCircle, Check, ArrowRight,
-  Sun, Moon, Plus, Bell, FileDown
+  Sun, Moon, Plus, Bell, FileDown, X, Trash2
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { analyzeCyberbullying } from '../utils/aiDetector';
@@ -15,7 +15,9 @@ export default function TeacherDashboard({
   hiddenTasks, 
   publishHiddenTask, 
   createNewTask, 
+  deleteTask,
   submissions, 
+  deleteSubmission,
   forwardSubmissionToCounselor, 
   messages, 
   forwardMessageToCounselor, 
@@ -24,6 +26,7 @@ export default function TeacherDashboard({
   toggleTheme, 
   materials, 
   addMaterial, 
+  deleteMaterial,
   announcements, 
   readAnnouncements = [], 
   markAnnouncementAsRead, 
@@ -120,6 +123,11 @@ export default function TeacherDashboard({
   // Document preview state
   const [previewFile, setPreviewFile] = useState(null);
 
+  // Delete Task Confirmation state
+  const [taskToDelete, setTaskToDelete] = useState(null);
+  const [materialToDelete, setMaterialToDelete] = useState(null);
+  const [subToDelete, setSubToDelete] = useState(null);
+
   // Materials manager states
   const [materialsView, setMaterialsView] = useState('list'); // 'list' or 'create'
   const [newMaterialTitle, setNewMaterialTitle] = useState('');
@@ -202,6 +210,8 @@ export default function TeacherDashboard({
   const [showHiddenDeptDropdown, setShowHiddenDeptDropdown] = useState(false);
   const [isCreatingHiddenTask, setIsCreatingHiddenTask] = useState(false);
   const [hiddenTaskSubject, setHiddenTaskSubject] = useState('');
+  const [hiddenTaskDragActive, setHiddenTaskDragActive] = useState(false);
+  const hiddenTaskFileInputRef = useRef(null);
 
   const handleCreateHiddenTask = async (e) => {
     e.preventDefault();
@@ -254,6 +264,7 @@ export default function TeacherDashboard({
       setHiddenTaskDepts(['Computer Science & Engineering']);
       setHiddenTaskSubject('');
       setHiddenTaskFile(null);
+      if (hiddenTaskFileInputRef.current) hiddenTaskFileInputRef.current.value = '';
       setShowHiddenDeptDropdown(false);
       setHiddenTaskCreatedModal(true);
     } catch (err) {
@@ -747,10 +758,9 @@ export default function TeacherDashboard({
                         <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{ann.title}</span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{ann.date}</span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '4px' }}>
-                        Posted by: Principal
-                      </div>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>{ann.content}</p>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: '12px', lineHeight: '1.5' }}>
+                        {ann.content || ann.description || ''}
+                      </p>
                       {!isRead && (
                         <button
                           onClick={() => markAnnouncementAsRead(ann.id)}
@@ -1038,28 +1048,40 @@ Deadline: Refer to dashboard instructions.`}
                               {sub.severityScore}%
                             </td>
                             <td>
-                              {sub.flagStatus === 'Flagged' ? (
-                                forwardedSubmissions.includes(sub.id) ? (
-                                  <button 
-                                    className="btn btn-secondary" 
-                                    style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'not-allowed' }}
-                                    disabled
-                                  >
-                                    Forwarded
-                                  </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {sub.flagStatus === 'Flagged' ? (
+                                  forwardedSubmissions.includes(sub.id) ? (
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '6px 12px', fontSize: '0.8rem', cursor: 'not-allowed' }}
+                                      disabled
+                                    >
+                                      Forwarded
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      onClick={() => handleForwardSubmission(sub)}
+                                      className="btn btn-danger" 
+                                      style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                      <span>Forward to Counselor</span>
+                                      <ArrowRight size={14} />
+                                    </button>
+                                  )
                                 ) : (
-                                  <button 
-                                    onClick={() => handleForwardSubmission(sub)}
-                                    className="btn btn-danger" 
-                                    style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                  >
-                                    <span>Forward to Counselor</span>
-                                    <ArrowRight size={14} />
-                                  </button>
-                                )
-                              ) : (
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No action required</span>
-                              )}
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No action required</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setSubToDelete(sub)}
+                                  className="btn btn-danger"
+                                  style={{ padding: '5px 10px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  title="Delete Submission"
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1107,9 +1129,24 @@ Deadline: Refer to dashboard instructions.`}
                               <span className="badge badge-info">{count} submissions</span>
                             </td>
                             <td>
-                              <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-                                View Details
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                                <button 
+                                  onClick={() => setSelectedSubmissionTask(t.title)} 
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+                                >
+                                  View Details
+                                </button>
+                                <button 
+                                  onClick={() => setTaskToDelete(t)} 
+                                  className="btn btn-danger" 
+                                  style={{ padding: '5px 10px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  title="Delete Task"
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1335,6 +1372,7 @@ Deadline: Refer to dashboard instructions.`}
                         <th>Description</th>
                         <th>Reference File</th>
                         <th>Upload Date</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1358,8 +1396,26 @@ Deadline: Refer to dashboard instructions.`}
                               </span>
                             </td>
                             <td>{mat.date}</td>
+                            <td>
+                              <button 
+                                onClick={() => setMaterialToDelete(mat)} 
+                                className="btn btn-danger" 
+                                style={{ padding: '5px 10px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                title="Delete Material"
+                              >
+                                <Trash2 size={13} />
+                                <span>Delete</span>
+                              </button>
+                            </td>
                           </tr>
                         ))}
+                      {materials.filter(m => isNameMatch(m.teacherName, user.name)).length === 0 && (
+                        <tr>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                            No materials uploaded yet.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1639,24 +1695,162 @@ Deadline: Refer to dashboard instructions.`}
                   </select>
                 </div>
                 <div style={{ marginBottom: '24px' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>Upload Reference File (PDF only) *</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', color: 'var(--text-secondary)' }}>
+                    Upload Reference File (PDF only) *
+                  </label>
+                  
                   <input 
                     type="file" 
-                    accept="application/pdf"
+                    ref={hiddenTaskFileInputRef}
+                    accept="application/pdf,.pdf"
+                    style={{ display: 'none' }}
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
                         const file = e.target.files[0];
                         if (!file.name.toLowerCase().endsWith('.pdf')) {
                           alert("Only PDF reference files are allowed.");
-                          e.target.value = null;
+                          e.target.value = '';
                           setHiddenTaskFile(null);
                           return;
                         }
                         setHiddenTaskFile(file);
                       }
                     }}
-                    required 
                   />
+
+                  {!hiddenTaskFile ? (
+                    <div 
+                      onClick={() => hiddenTaskFileInputRef.current?.click()}
+                      onDragEnter={(e) => { e.preventDefault(); setHiddenTaskDragActive(true); }}
+                      onDragOver={(e) => { e.preventDefault(); setHiddenTaskDragActive(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); setHiddenTaskDragActive(false); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setHiddenTaskDragActive(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          const file = e.dataTransfer.files[0];
+                          if (!file.name.toLowerCase().endsWith('.pdf')) {
+                            alert("Only PDF reference files are allowed.");
+                            return;
+                          }
+                          setHiddenTaskFile(file);
+                        }
+                      }}
+                      style={{
+                        border: `2px dashed ${hiddenTaskDragActive ? 'var(--primary)' : 'var(--border-color)'}`,
+                        borderRadius: '8px',
+                        padding: '20px 16px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        background: hiddenTaskDragActive ? 'rgba(79, 70, 229, 0.08)' : 'var(--bg-tertiary)',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <div style={{ 
+                        width: '40px', 
+                        height: '40px', 
+                        borderRadius: '50%', 
+                        background: 'rgba(56, 189, 248, 0.12)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        color: 'var(--primary)'
+                      }}>
+                        <UploadCloud size={22} />
+                      </div>
+                      <div>
+                        <p style={{ fontWeight: '600', fontSize: '0.88rem', color: 'var(--text-primary)', margin: 0 }}>
+                          Click to browse <span style={{ color: 'var(--text-muted)', fontWeight: 'normal' }}>or drag & drop</span>
+                        </p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                          Only PDF files are allowed up to 25MB
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between',
+                      padding: '12px 16px', 
+                      background: 'var(--bg-tertiary)', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '8px',
+                      gap: '12px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                        <div style={{ 
+                          width: '38px', 
+                          height: '38px', 
+                          borderRadius: '8px', 
+                          background: 'rgba(239, 68, 68, 0.12)', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          color: '#ef4444',
+                          flexShrink: 0
+                        }}>
+                          <FileText size={20} />
+                        </div>
+                        <div style={{ minWidth: 0, textAlign: 'left' }}>
+                          <p style={{ 
+                            fontWeight: '600', 
+                            fontSize: '0.85rem', 
+                            color: 'var(--text-primary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '240px',
+                            margin: 0
+                          }}>
+                            {hiddenTaskFile.name}
+                          </p>
+                          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                            {(hiddenTaskFile.size / (1024 * 1024)).toFixed(2)} MB • PDF Document
+                          </p>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        <button 
+                          type="button" 
+                          onClick={() => hiddenTaskFileInputRef.current?.click()} 
+                          className="btn btn-secondary"
+                          style={{ padding: '5px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
+                        >
+                          Change
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHiddenTaskFile(null);
+                            if (hiddenTaskFileInputRef.current) hiddenTaskFileInputRef.current.value = '';
+                          }} 
+                          style={{ 
+                            background: 'none', 
+                            border: 'none', 
+                            color: 'var(--text-muted)', 
+                            cursor: 'pointer',
+                            padding: '5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px',
+                            transition: 'color 0.15s ease'
+                          }}
+                          title="Remove file"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                   <button 
@@ -1669,6 +1863,7 @@ Deadline: Refer to dashboard instructions.`}
                       setHiddenTaskSubject('');
                       setHiddenTaskFile(null);
                       setShowHiddenDeptDropdown(false);
+                      if (hiddenTaskFileInputRef.current) hiddenTaskFileInputRef.current.value = '';
                     }} 
                     className="btn btn-secondary"
                     disabled={isCreatingHiddenTask}
@@ -1808,6 +2003,117 @@ Deadline: Refer to dashboard instructions.`}
             >
               Okay
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Task Confirmation Modal */}
+      {taskToDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '440px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <AlertTriangle size={44} style={{ color: 'var(--danger)', margin: '0 auto 16px', display: 'block' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-primary)' }}>Delete Task?</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong>"{taskToDelete.title}"</strong>? This will permanently remove the task and all associated submissions from the database.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setTaskToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 22px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (deleteTask) {
+                    await deleteTask(taskToDelete.id);
+                  }
+                  setTaskToDelete(null);
+                }}
+                className="btn btn-danger"
+                style={{ padding: '8px 22px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+              >
+                <Trash2 size={15} />
+                <span>Delete Task</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Material Confirmation Modal */}
+      {materialToDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '440px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <AlertTriangle size={44} style={{ color: 'var(--danger)', margin: '0 auto 16px', display: 'block' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-primary)' }}>Delete Material?</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong>"{materialToDelete.title}"</strong>? This will permanently remove the material and attached file from the database.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setMaterialToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 22px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (deleteMaterial) {
+                    await deleteMaterial(materialToDelete.id);
+                  }
+                  setMaterialToDelete(null);
+                }}
+                className="btn btn-danger"
+                style={{ padding: '8px 22px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+              >
+                <Trash2 size={15} />
+                <span>Delete Material</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Submission Confirmation Modal */}
+      {subToDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="glass-panel" style={{ width: '440px', padding: '28px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: '12px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <AlertTriangle size={44} style={{ color: 'var(--danger)', margin: '0 auto 16px', display: 'block' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-primary)' }}>Delete Submission?</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to delete this submission by <strong>"{subToDelete.studentName}"</strong>? This will permanently remove the submission and file from the database.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setSubToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 22px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (deleteSubmission) {
+                    await deleteSubmission(subToDelete.id);
+                  }
+                  setSubToDelete(null);
+                }}
+                className="btn btn-danger"
+                style={{ padding: '8px 22px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+              >
+                <Trash2 size={15} />
+                <span>Delete Submission</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

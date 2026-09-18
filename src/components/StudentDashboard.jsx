@@ -33,7 +33,7 @@ export default function StudentDashboard({
 }) {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('student_active_tab') || 'dashboard');
   const [selectedContact, setSelectedContact] = useState(null);
-  const [chatInputs, setChatInputs] = useState({ 'Jan She': '', 'Sanshetha S': '' });
+  const [chatInputs, setChatInputs] = useState({});
   
   const [taskSuccessModal, setTaskSuccessModal] = useState(false);
   const [reportSuccessModal, setReportSuccessModal] = useState(false);
@@ -131,13 +131,21 @@ export default function StudentDashboard({
       }
     }
   });
-  // Add historical chat contacts not in user table (e.g. mock users), excluding teacher accounts
+  // Add historical chat contacts not in user table (excluding mock and teacher accounts)
   Object.keys(chats).forEach((name, idx) => {
-    if (name !== user.name && !name.toLowerCase().includes('teacher') && !chatContacts.has(name)) {
+    if (name !== user.name && !name.toLowerCase().includes('teacher') && name !== 'Jan She' && name !== 'Sanshetha S' && !chatContacts.has(name)) {
       chatContacts.set(name, { name: name, role: 'Student', id: 'history-' + idx });
     }
   });
   const contactsList = Array.from(chatContacts.values());
+
+  useEffect(() => {
+    if (activeTab === 'chat' && contactsList.length > 0) {
+      if (!selectedContact || selectedContact === 'Jan She' || selectedContact === 'Sanshetha S' || !contactsList.some(c => c.name === selectedContact)) {
+        setSelectedContact(contactsList[0].name);
+      }
+    }
+  }, [activeTab, contactsList, selectedContact]);
   const [issueDragActive, setIssueDragActive] = useState(false);
   const [selectedTeacherName, setSelectedTeacherName] = useState('');
 
@@ -670,7 +678,7 @@ export default function StudentDashboard({
                           By Principal
                         </div>
                         <h4 style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '4px' }}>{ann.title}</h4>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ann.content}</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ann.content || ann.description || ''}</p>
                       </div>
                     ))
                   )}
@@ -742,7 +750,7 @@ export default function StudentDashboard({
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{ann.date}</span>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '16px' }}>
-                      {ann.content}
+                      {ann.content || ann.description || ''}
                     </p>
                     {!isRead && (
                       <button 
@@ -1018,12 +1026,14 @@ export default function StudentDashboard({
                 <h3 style={{ fontSize: '1rem', fontWeight: 'bold' }}>Conversations</h3>
               </div>
               <div className="chat-contacts-list">
-                {contactsList.map(u => {
+                {contactsList.length === 0 ? (
+                  <div style={{ padding: '24px 16px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                    No registered classmates found in your department.
+                  </div>
+                ) : contactsList.map(u => {
                   const initials = u.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                   const lastMsg = chats[u.name]?.[chats[u.name]?.length - 1]?.text || 'No messages yet';
-                  const isMock = u.id && String(u.id).startsWith('history-');
-                  const isJan = u.name === 'Jan She';
-                  const avatarBg = isJan ? 'var(--accent)' : (u.name === 'Sanshetha S' ? 'var(--warning)' : 'var(--success)');
+                  const avatarBg = 'var(--accent)';
                   const totalCount = (chats[u.name] || []).length;
                   const readCount = readChatMsgCounts[u.name] || 0;
                   const unreadCountForContact = Math.max(0, totalCount - readCount);
@@ -1044,7 +1054,7 @@ export default function StudentDashboard({
                               </span>
                             )}
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                              {isMock ? (isJan ? 'Active' : '10m ago') : 'Active'}
+                              Active
                             </span>
                           </div>
                         </div>
@@ -1063,7 +1073,7 @@ export default function StudentDashboard({
               <div className="chat-main-area">
                 <div className="chat-header-bar">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="user-avatar-circle" style={{ background: selectedContact === 'Jan She' ? 'var(--accent)' : selectedContact === 'Sanshetha S' ? 'var(--warning)' : 'var(--success)' }}>
+                    <div className="user-avatar-circle" style={{ background: 'var(--accent)' }}>
                       {selectedContact.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                     </div>
                     <div>
@@ -1357,7 +1367,7 @@ export default function StudentDashboard({
                   });
 
                   const latestSlot = mySlots.length > 0 ? mySlots[mySlots.length - 1] : null;
-                  const isFinished = latestSlot && latestSlot.status === 'Finished';
+                  const isFinished = latestSlot && (latestSlot.status === 'Finished' || latestSlot.status === 'Completed');
                   const isPending = latestSlot && latestSlot.status === 'Pending';
 
                   return (
@@ -1468,8 +1478,6 @@ export default function StudentDashboard({
                 const clean = trimmed.replace(/^prof\.?\s*/i, '').replace(/^dr\.?\s*/i, '').replace(/^mr\.?\s*/i, '').replace(/^mrs\.?\s*/i, '').replace(/\s+/g, ' ').trim();
                 
                 if (clean.toLowerCase().includes('anand')) return 'Prof. Anand Kumar';
-                if (clean.toLowerCase().includes('rak') || clean.toLowerCase().includes('karnan')) return 'Prof. Rak Karnan';
-                if (clean.toLowerCase().includes('suresh')) return 'Prof. Suresh Kumar';
                 
                 const matchUser = (users || []).find(u => {
                   const un = (u.name || '').toLowerCase().replace(/^prof\.?\s*/i, '').replace(/\s+/g, '');
@@ -1648,14 +1656,10 @@ export default function StudentDashboard({
                 .filter(u => u.role === 'Teacher' && isDeptMatch(u.dept, user.dept))
                 .map(u => getCanonicalTeacherName(u.name));
 
-              // 3. Standard Department Faculty for CSE
-              const defaultFaculty = isDeptMatch(user.dept, 'CSE') ? ['Prof. Anand Kumar', 'Prof. Rak Karnan', 'Prof. Suresh Kumar'] : [];
-
-              // Combined UNIQUE Canonical Teachers
+              // Combined UNIQUE Canonical Teachers (Only real registered teachers or teachers with uploaded materials)
               const uniqueTeachers = Array.from(new Set([
                 ...materialTeacherNames,
-                ...registeredTeachers,
-                ...defaultFaculty
+                ...registeredTeachers
               ])).filter(Boolean);
 
               return (
@@ -1708,6 +1712,11 @@ export default function StudentDashboard({
                       );
                     })}
                   </div>
+                  {uniqueTeachers.length === 0 && (
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
+                      No faculty materials published for your department yet.
+                    </div>
+                  )}
                 </div>
               );
             })()}

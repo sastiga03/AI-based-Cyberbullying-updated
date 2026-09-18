@@ -3,7 +3,7 @@ import { Activity } from "lucide-react";
 import { 
   User, LogOut, Settings, Camera, Save, 
   FileText, ShieldCheck, TrendingUp, AlertTriangle,
-  Sun, Moon, Bell, UploadCloud, MessageSquare, Calendar
+  Sun, Moon, Bell, UploadCloud, MessageSquare, Calendar, Trash2, CheckCircle
 } from 'lucide-react';
 
 export default function PrincipalDashboard({ 
@@ -14,9 +14,10 @@ export default function PrincipalDashboard({
   theme, 
   toggleTheme, 
   addAnnouncement, 
+  deleteAnnouncement,
   counselingSlots, 
   studentMessages, 
-  announcements
+  announcements = []
 }) {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('principal_active_tab') || 'dashboard');
 
@@ -28,6 +29,8 @@ export default function PrincipalDashboard({
   const [annTargetRole, setAnnTargetRole] = useState('All');
   const [annTitle, setAnnTitle] = useState('');
   const [annDesc, setAnnDesc] = useState('');
+  const [showAnnouncementSuccessModal, setShowAnnouncementSuccessModal] = useState(false);
+  const [postedAnnouncementRole, setPostedAnnouncementRole] = useState('All');
 
   // Settings States
   const [profilePhoto, setProfilePhoto] = useState(user?.profilePhotoUrl || null);
@@ -51,17 +54,6 @@ export default function PrincipalDashboard({
 
   // Dynamic severity analysis table data: High to Low severity
   const severityRecords = (() => {
-    const defaultSeed = [
-      { name: 'Thrisha', dept: 'CIVIL C', severity: 95, status: 'Unresolved' },
-      { name: 'Rahul', dept: 'CSE A', severity: 87, status: 'Unresolved' },
-      { name: 'Thejan', dept: 'IT A', severity: 80, status: 'Resolved' },
-      { name: 'Jaya She', dept: 'CSE B', severity: 85, status: 'Unresolved' },
-      { name: 'Mouna', dept: 'CSE B', severity: 47, status: 'Unresolved' },
-      { name: 'Aakil', dept: 'ECE C', severity: 22, status: 'Resolved' },
-      { name: 'Asin', dept: 'IT A', severity: 4, status: 'Resolved' },
-      { name: 'Sanjai', dept: 'ECE C', severity: 2, status: 'Resolved' }
-    ];
-
     const mapped = (cases || []).map(c => {
       const numSev = parseInt(String(c.severity || '0').replace('%', '')) || 0;
       return {
@@ -73,14 +65,7 @@ export default function PrincipalDashboard({
       };
     });
 
-    const combined = [...mapped];
-    defaultSeed.forEach(seed => {
-      if (!combined.some(item => item.name.toLowerCase() === seed.name.toLowerCase())) {
-        combined.push(seed);
-      }
-    });
-
-    return combined.sort((a, b) => b.severity - a.severity);
+    return mapped.sort((a, b) => b.severity - a.severity);
   })();
 
   // Save changes settings
@@ -366,15 +351,16 @@ export default function PrincipalDashboard({
             <form onSubmit={(e) => {
               e.preventDefault();
               if (!annTitle || !annDesc) return;
+              const targetRoleToPost = annTargetRole;
               addAnnouncement({
                 title: annTitle,
                 description: annDesc,
-                targetRole: annTargetRole
+                targetRole: targetRoleToPost
               });
-              alert(`Announcement "${annTitle}" successfully published to ${annTargetRole}!`);
+              setPostedAnnouncementRole(targetRoleToPost);
+              setShowAnnouncementSuccessModal(true);
               setAnnTitle('');
               setAnnDesc('');
-              setActiveTab('dashboard');
             }}>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>For Which Role *</label>
@@ -422,6 +408,59 @@ export default function PrincipalDashboard({
                 <button type="submit" className="btn btn-primary">Post Announcement</button>
               </div>
             </form>
+
+            {/* Manage Published Announcements */}
+            <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--border-glass)' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={18} style={{ color: 'var(--accent)' }} />
+                <span>Active Published Announcements ({announcements.length})</span>
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {announcements.map(ann => (
+                  <div 
+                    key={ann.id} 
+                    style={{ 
+                      background: 'var(--bg-tertiary)', 
+                      padding: '16px', 
+                      borderRadius: '8px', 
+                      border: '1px solid var(--border-glass)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: '16px'
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{ann.title}</span>
+                        <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>For {ann.targetRole || 'All'}</span>
+                      </div>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '6px 0 8px', lineHeight: '1.5' }}>{ann.content || ann.description || ''}</p>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Posted on: {ann.date}</span>
+                    </div>
+                    {deleteAnnouncement && (
+                      <button 
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete announcement: "${ann.title}"?`)) {
+                            deleteAnnouncement(ann.id);
+                          }
+                        }}
+                        className="btn btn-secondary" 
+                        style={{ padding: '8px', color: 'var(--danger)', borderColor: 'var(--danger-glow)' }}
+                        title="Delete Announcement"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {announcements.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    No announcements published yet.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -484,6 +523,50 @@ export default function PrincipalDashboard({
           </div>
         )}
       </main>
+
+      {/* Internal Announcement Posted Success Modal */}
+      {showAnnouncementSuccessModal && (
+        <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          background: 'rgba(0,0,0,0.6)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          zIndex: 9999 
+        }}>
+          <div className="glass-panel" style={{ 
+            width: '420px', 
+            padding: '32px 24px', 
+            background: 'var(--bg-secondary)', 
+            border: '1px solid var(--border-glass)', 
+            borderRadius: '12px', 
+            textAlign: 'center',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+          }}>
+            <CheckCircle size={48} style={{ color: 'var(--success)', margin: '0 auto 16px', display: 'block' }} />
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-primary)' }}>
+              Announcement Posted
+            </h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Announcement posted to the selected roles ({postedAnnouncementRole === 'All' ? 'All Roles' : `${postedAnnouncementRole}s`}).
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAnnouncementSuccessModal(false);
+              }}
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px 16px', fontSize: '0.9rem', fontWeight: 'bold' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
