@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Shield, Lock, Award, BookOpen, GraduationCap, Clipboard, ArrowLeft } from 'lucide-react';
+import { AUTH_API_URL } from '../config';
 
 export default function LoginPage({ onLogin, onNavigate }) {
   const [email, setEmail] = useState('');
@@ -11,7 +12,7 @@ export default function LoginPage({ onLogin, onNavigate }) {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8081/api/auth/login', {
+      const response = await fetch(`${AUTH_API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.toLowerCase().trim(), password: password })

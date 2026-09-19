@@ -143,7 +143,11 @@ public class CyberbullyingAnalyzer {
                 Map<String, Object> reqBody = new HashMap<>();
                 
                 Map<String, Object> part = new HashMap<>();
-                part.put("text", "System Prompt: Analyze the following student text for cyberbullying or harassment. Respond ONLY with a JSON object in this format: { \"isHarmful\": true/false, \"severityScore\": 0 to 100, \"category\": \"Threat\" | \"Harassment\" | \"Insult\" | \"Exclusion\" | \"None\", \"reason\": \"Brief explanation of the decision\" }. Text: " + text);
+                part.put("text", "System Prompt: Analyze the following student text for cyberbullying or harassment. "
+                		+ "Respond ONLY with a JSON object in this format: "
+                		+ "{ \"isHarmful\": true/false, \"severityScore\": 0 to 100, \"category\": "
+                		+ "\"Threat\" | \"Harassment\" | \"Insult\" | \"Exclusion\" | \"None\", \"reason\": "
+                		+ "\"Brief explanation of the decision\" }. Text: " + text);
                 
                 Map<String, Object> partContainer = new HashMap<>();
                 partContainer.put("parts", Collections.singletonList(part));

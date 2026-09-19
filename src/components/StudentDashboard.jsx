@@ -8,6 +8,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { STUDENT_RULES } from '../mockData';
 import { analyzeCyberbullying } from '../utils/aiDetector';
+import { MAIN_API_URL } from '../config';
 
 export default function StudentDashboard({ 
   user, 
@@ -304,7 +305,7 @@ export default function StudentDashboard({
       }
 
       if (fileUrl) {
-        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://localhost:8082${fileUrl}`;
+        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${MAIN_API_URL}${fileUrl}`;
         const res = await fetch(fullUrl);
         if (res.ok) {
           const blob = await res.blob();

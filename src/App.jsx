@@ -9,6 +9,7 @@ import AdminDashboard from './components/AdminDashboard';
 import PrincipalDashboard from './components/PrincipalDashboard';
 
 import { analyzeCyberbullying } from './utils/aiDetector';
+import { AUTH_API_URL, MAIN_API_URL } from './config';
 
 function App() {
   // Theme state
@@ -131,7 +132,7 @@ function App() {
     const formData = new FormData();
     formData.append('file', fileObj);
     try {
-      const res = await fetch('http://localhost:8082/api/files/upload', {
+      const res = await fetch(`${MAIN_API_URL}/api/files/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -155,7 +156,7 @@ function App() {
 
     // 1. Fetch announcements
     try {
-      const res = await fetch('http://localhost:8082/api/announcements', {
+      const res = await fetch(`${MAIN_API_URL}/api/announcements`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -175,7 +176,7 @@ function App() {
 
     // 2. Fetch tasks
     try {
-      const res = await fetch('http://localhost:8082/api/tasks?all=true', {
+      const res = await fetch(`${MAIN_API_URL}/api/tasks?all=true`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -189,7 +190,7 @@ function App() {
 
     // 3. Fetch submissions
     try {
-      const res = await fetch('http://localhost:8082/api/submissions?all=true', {
+      const res = await fetch(`${MAIN_API_URL}/api/submissions?all=true`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -206,7 +207,7 @@ function App() {
 
     // 4. Fetch cases
     try {
-      const res = await fetch('http://localhost:8082/api/cases', {
+      const res = await fetch(`${MAIN_API_URL}/api/cases`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -237,7 +238,7 @@ function App() {
 
     // 5. Fetch chats
     try {
-      const res = await fetch('http://localhost:8082/api/chats', {
+      const res = await fetch(`${MAIN_API_URL}/api/chats`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setChats(await res.json());
@@ -245,11 +246,11 @@ function App() {
 
     // 6. Fetch users/contacts (accessible to all roles, fallback to /api/users)
     try {
-      let res = await fetch('http://localhost:8081/api/users/contacts', {
+      let res = await fetch(`${AUTH_API_URL}/api/users/contacts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
-        res = await fetch('http://localhost:8081/api/users', {
+        res = await fetch(`${AUTH_API_URL}/api/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
       }
@@ -258,7 +259,7 @@ function App() {
 
     // 7. Fetch materials
     try {
-      const res = await fetch('http://localhost:8082/api/materials', {
+      const res = await fetch(`${MAIN_API_URL}/api/materials`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -270,7 +271,7 @@ function App() {
 
     // 8. Fetch counseling slots
     try {
-      const res = await fetch('http://localhost:8082/api/counseling-slots?all=true', {
+      const res = await fetch(`${MAIN_API_URL}/api/counseling-slots?all=true`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -286,7 +287,7 @@ function App() {
 
     // 9. Fetch student messages (Teacher inbox)
     try {
-      const res = await fetch('http://localhost:8082/api/student-messages', {
+      const res = await fetch(`${MAIN_API_URL}/api/student-messages`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -324,7 +325,7 @@ function App() {
         }
 
         // Fetch fresh profile from backend to ensure profilePhotoUrl is up to date
-        fetch('http://localhost:8081/api/users/profile', {
+        fetch(`${AUTH_API_URL}/api/users/profile`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
           .then(res => res.ok ? res.json() : null)
@@ -370,7 +371,7 @@ function App() {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        await fetch('http://localhost:8081/api/auth/logout', {
+        await fetch(`${AUTH_API_URL}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -402,7 +403,7 @@ function App() {
       localStorage.setItem(`readAnnouncements_${currentUser.email}`, JSON.stringify(next));
     }
     try {
-      await fetch(`http://localhost:8082/api/announcements/${announcementId}/read`, {
+      await fetch(`${MAIN_API_URL}/api/announcements/${announcementId}/read`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -434,7 +435,7 @@ function App() {
 
         try {
           const token = localStorage.getItem('token');
-          const res = await fetch('http://localhost:8082/api/ai/scan-submission', {
+          const res = await fetch(`${MAIN_API_URL}/api/ai/scan-submission`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ studentName: currentUser?.name || 'Harshini Sasti', comment: comment, className: 'CSE A' })
@@ -455,7 +456,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8082/api/submissions', {
+      await fetch(`${MAIN_API_URL}/api/submissions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -471,7 +472,7 @@ function App() {
   const publishHiddenTask = async (taskId) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/tasks/${taskId}/publish`, {
+      await fetch(`${MAIN_API_URL}/api/tasks/${taskId}/publish`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -489,7 +490,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8082/api/tasks', {
+      await fetch(`${MAIN_API_URL}/api/tasks`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -532,7 +533,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/tasks/${taskId}`, {
+      await fetch(`${MAIN_API_URL}/api/tasks/${taskId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -552,7 +553,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/submissions/${subId}`, {
+      await fetch(`${MAIN_API_URL}/api/submissions/${subId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -564,7 +565,7 @@ function App() {
   const forwardSubmissionToCounselor = async (sub) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/submissions/${sub.id}/forward`, {
+      await fetch(`${MAIN_API_URL}/api/submissions/${sub.id}/forward`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -574,7 +575,7 @@ function App() {
       localStorage.setItem('forwardedSubmissions', JSON.stringify(next));
 
       // Also create a message under the Counselor's name in Student Messages
-      await fetch('http://localhost:8082/api/student-messages', {
+      await fetch(`${MAIN_API_URL}/api/student-messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -596,7 +597,7 @@ function App() {
   const forwardMessageToCounselor = async (msg) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/student-messages/${msg.id}/forward`, {
+      await fetch(`${MAIN_API_URL}/api/student-messages/${msg.id}/forward`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -618,7 +619,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/cases/${caseId}/resolve`, {
+      await fetch(`${MAIN_API_URL}/api/cases/${caseId}/resolve`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -681,7 +682,7 @@ function App() {
 
         try {
           const token = localStorage.getItem('token');
-          const res = await fetch('http://localhost:8082/api/ai/scan-message', {
+          const res = await fetch(`${MAIN_API_URL}/api/ai/scan-message`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ sender: messageObj.sender || currentUser?.name || 'Harshini Sasti', content: text, className: 'CSE A' })
@@ -702,7 +703,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8082/api/chats', {
+      await fetch(`${MAIN_API_URL}/api/chats`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -718,7 +719,7 @@ function App() {
   const reportIssue = async ({ type, desc, file, teacherName }) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8082/api/cases', {
+      await fetch(`${MAIN_API_URL}/api/cases`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -727,7 +728,7 @@ function App() {
         body: JSON.stringify({ type, desc, file })
       });
 
-      await fetch('http://localhost:8082/api/student-messages', {
+      await fetch(`${MAIN_API_URL}/api/student-messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -749,7 +750,7 @@ function App() {
   const addUser = async (newUserObj) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8081/api/users', {
+      await fetch(`${AUTH_API_URL}/api/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -765,7 +766,7 @@ function App() {
   const deleteUser = async (userId) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/users/${userId}`, {
+      await fetch(`${AUTH_API_URL}/api/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -777,7 +778,7 @@ function App() {
   const updateProfile = async (newDetails) => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('http://localhost:8081/api/users/profile', {
+      const response = await fetch(`${AUTH_API_URL}/api/users/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -800,7 +801,7 @@ function App() {
   const addMaterial = async (newMat) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch('http://localhost:8082/api/materials', {
+      await fetch(`${MAIN_API_URL}/api/materials`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -816,7 +817,7 @@ function App() {
     setMaterials(prev => (prev || []).filter(m => String(m.id) !== String(matId)));
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/materials/${matId}`, {
+      await fetch(`${MAIN_API_URL}/api/materials/${matId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -847,7 +848,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('http://localhost:8082/api/counseling-slots', {
+      const res = await fetch(`${MAIN_API_URL}/api/counseling-slots`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -885,7 +886,7 @@ function App() {
 
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/counseling-slots/${slotId}`, {
+      await fetch(`${MAIN_API_URL}/api/counseling-slots/${slotId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -906,7 +907,7 @@ function App() {
     const token = localStorage.getItem('token');
     const contentText = newAnn.description || newAnn.content || '';
     try {
-      await fetch('http://localhost:8082/api/announcements', {
+      await fetch(`${MAIN_API_URL}/api/announcements`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -939,7 +940,7 @@ function App() {
   const deleteAnnouncement = async (announcementId) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8082/api/announcements/${announcementId}`, {
+      await fetch(`${MAIN_API_URL}/api/announcements/${announcementId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -951,7 +952,7 @@ function App() {
   const updateUser = async (userId, updatedUser) => {
     const token = localStorage.getItem('token');
     try {
-      await fetch(`http://localhost:8081/api/users/${userId}`, {
+      await fetch(`${AUTH_API_URL}/api/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

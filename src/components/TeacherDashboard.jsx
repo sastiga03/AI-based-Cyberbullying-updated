@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { analyzeCyberbullying } from '../utils/aiDetector';
+import { MAIN_API_URL } from '../config';
 
 export default function TeacherDashboard({ 
   user, 
@@ -170,7 +171,7 @@ export default function TeacherDashboard({
       }
 
       if (fileUrl) {
-        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://localhost:8082${fileUrl}`;
+        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${MAIN_API_URL}${fileUrl}`;
         const res = await fetch(fullUrl);
         if (res.ok) {
           const blob = await res.blob();
@@ -681,7 +682,7 @@ export default function TeacherDashboard({
                             <span 
                               onClick={() => {
                                  if (fUrl) {
-                                   window.open('http://localhost:8082' + fUrl, '_blank');
+                                   window.open(MAIN_API_URL + fUrl, '_blank');
                                  } else {
                                   setPreviewFile(fName);
                                 }
